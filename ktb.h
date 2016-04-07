@@ -283,7 +283,7 @@ extern int tmem_copy_to_client(struct page* client_page, struct page* page);
 extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 
 /*custom radix_tree_destroy function*/
-void radix_tree_node_free(struct radix_tree_node* ); 
+bool  __radix_tree_delete_node(struct radix_tree_root*, struct radix_tree_node*); 
 void* indirect_to_ptr(void *);
 
 #endif /*_KTB_H_*/
