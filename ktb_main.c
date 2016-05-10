@@ -7,6 +7,8 @@
 #include <linux/tmem.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/debugfs.h>
+//#include <linux/spinlock.h>
 #include "ktb.h"
 
 #define mtp_debug 0
@@ -15,19 +17,31 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aby Sam Ross");
 
 //static struct tmem_client ktb_host;
-static struct tmem_client ktb_all_clients[MAX_CLIENTS];
+static struct tmem_client *ktb_all_clients[MAX_CLIENTS];
 
 struct kmem_cache* tmem_page_descriptors_cachep;
 struct kmem_cache* tmem_page_content_desc_cachep;
 struct kmem_cache* tmem_objects_cachep;
 struct kmem_cache* tmem_object_nodes_cachep;
 
-struct rb_root pcd_tree_roots[256]; /* choose based on first byte of page */
-rwlock_t pcd_tree_rwlocks[256]; /* poor man's concurrency for now */
-long long deduped_puts;
+/* choose based on first byte of page*/ 
+struct rb_root pcd_tree_roots[256]; 
+/* poor man's concurrency for now */
+rwlock_t pcd_tree_rwlocks[256]; 
+//long long deduped_puts;
+/******************************************************************************/ 
+/*                                                      List global variables */
+/******************************************************************************/ 
+DEFINE_SPINLOCK(client_list_lock);
+//DEFINE_SPINLOCK(lol_lock);
 
-void show_client_pool_info(struct tmem_client*, struct tmem_pool*);
+/******************************************************************************/ 
+/*                                                  End list global variables */
+/******************************************************************************/ 
 
+/******************************************************************************/ 
+/*                                                           Debuggging flags */
+/******************************************************************************/ 
 int debug_ktb_new_pool = 0;
 int debug_ktb_destroy_pool = 0;
 int debug_ktb_put_page = 0;
@@ -44,6 +58,7 @@ int debug_tmem_pgp_free = 0;
 int debug_tmem_pgp_free_data = 0;
 int debug_custom_radix_tree_destroy = 0;
 int debug_custom_radix_tree_node_destroy = 0;
+int debug_make_summary = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -61,77 +76,62 @@ int show_msg_tmem_pgp_free = 0;
 int show_msg_tmem_pgp_free_data = 0;
 int show_msg_custom_radix_tree_destroy = 0;
 int show_msg_custom_radix_tree_node_destroy = 0;
+int show_msg_make_summary = 0;
+/******************************************************************************/ 
+/*                                                       End debuggging flags */
+/******************************************************************************/ 
+
+/******************************************************************************/ 
+/*                                                         Debugfs files/vars */
+/******************************************************************************/ 
+struct dentry *root = NULL;
+
+u64 tmem_puts;
+u64 succ_tmem_puts;
+u64 failed_tmem_puts;
+
+u64 tmem_gets;
+u64 succ_tmem_gets;
+u64 failed_tmem_gets;
+
+u64 tmem_dedups;
+u64 succ_tmem_dedups;
+u64 failed_tmem_dedups;
+
+u64 tmem_invalidates;
+u64 succ_tmem_invalidates;
+u64 failed_tmem_invalidates;
+
+u64 tmem_inode_invalidates;
+u64 succ_tmem_inode_invalidates;
+u64 failed_tmem_inode_invalidates;
+
+u64 tmem_page_invalidates;
+u64 succ_tmem_page_invalidates;
+u64 failed_tmem_page_invalidates;
+/******************************************************************************/ 
+/*                                                     End Debugfs files/vars */
+/******************************************************************************/ 
 
 /******************************************************************************/
 /*							  ktb helper functions*/
 /******************************************************************************/
+
 //Get a client with client ID if one exists
-static struct tmem_client* ktb_get_client_by_id(int client_id)
+struct tmem_client* ktb_get_client_by_id(int client_id)
 {
 	//struct tmem_client* client = &ktb_host;
 	struct tmem_client* client = NULL;
-
-	//pr_info("***ktb_get_client_by_id***\n");
-	//if (client_id != LOCAL_CLIENT)
-	//{
 
 	//return NULL if Max number of clients exceeded
 	if (client_id >= MAX_CLIENTS)
 		goto out;
 
-	//return an existing or allocated but unintialized/unused client address
-	client = &ktb_all_clients[client_id];
-
-	//}
-	//else
-	//client = &ktb_host;
+	//return a pointer to a client 
+	client = ktb_all_clients[client_id];
 out:
 	return client;
 }
-
-//checks if the client ID belongs to an existing client
-//or an invalid client (client ID i>= 16)
-//else initializes a new client
-int ktb_new_client(int client_id)
-{
-	struct tmem_client *client;
-	int ret = 0;
-
-	//pr_info("***ktb_new_client***\n");
-	client = ktb_get_client_by_id(client_id);
-
-	//return 0 if Max number of clients exceeded
-	if (client == NULL)
-		goto out;
-
-	//return -1 if a client with this client ID already exists
-	if (client->allocated)
-	{
-		ret = -1;
-		goto out;
-	}
-
-	//initialize a new client and return 1
-	client->allocated = 1;
-	client->client_id = client_id;
-	ret = 1;
-
-out:
-	if(ret == 1)
-		pr_info(" *** mtp | Initialized new client: %d | "
-				"ktb_new_client *** \n", client_id);
-	else if(ret == -1)
-		pr_info(" *** mtp | Existing client: %d operation | "
-				"ktb_new_client *** \n", client_id);
-	else
-		pr_info(" *** mtp | No such client possible: %d | "
-				"ktb_new_client *** \n ", client_id);
-
-	return ret;
-}
-/******************************************************************************/
-/*						   End of ktb helper functions*/
-/******************************************************************************/
 void show_client_pool_info(struct tmem_client* client, struct tmem_pool* pool)
 {
 	struct tmem_client* tmp_cli = pool->associated_client;
@@ -141,10 +141,8 @@ void show_client_pool_info(struct tmem_client* client, struct tmem_pool* pool)
 	//pr_info("tmp_cli->refcount.counter %d\n", tmp_cli->refcount.counter);
 	//pr_info("-------------------\n");
 
-
 	pr_info("\nPool Info via Client\n");
 	pr_info("*********\n");
-
 
 	pr_info("pool->pool_id: %u\n", pool->pool_id);
 	pr_info("client->this_client_all_pools[pool->pool_id]->pool_id): %u\n",
@@ -160,17 +158,50 @@ void show_client_pool_info(struct tmem_client* client, struct tmem_pool* pool)
 	pr_info("client->this_client_all_pools[pool->pool_id]->uuid[0]): %llu\n",
 		client->this_client_all_pools[pool->pool_id]->uuid[0]);
 
-
 	pr_info("pool->uuid[1]: %llu\n", pool->uuid[1]);
 	pr_info("client->this_client_all_pools[pool->pool_id]->uuid[1]): %llu\n",
 		client->this_client_all_pools[pool->pool_id]->uuid[1]);
 	pr_info("-------------------\n");
-
-
 }
+/******************************************************************************/
+/*						   End of ktb helper functions*/
+/******************************************************************************/
+
 /******************************************************************************/
 /*                           					 KTB FUNCTIONS*/
 /******************************************************************************/
+static int ktb_create_client(int client_id)
+{
+        struct tmem_client *client = NULL;
+
+        if (client_id >= MAX_CLIENTS)
+                goto out;
+
+        client = ktb_get_client_by_id(client_id);
+
+        /*a client already present at that id*/
+        if(client != NULL)
+                goto out;
+        
+        client = kmalloc(sizeof(struct tmem_client), GFP_ATOMIC);
+        
+        if(client == NULL)
+                goto out;
+
+        memset(client, 0, sizeof(struct tmem_client));
+
+        client->client_id = client_id;
+        client->allocated = 1;
+
+        INIT_LIST_HEAD(&client->remote_sharing_candidate_list);
+        INIT_LIST_HEAD(&client->local_only_list);
+
+        ktb_all_clients[client_id] = client;
+        return 0;
+out:
+        return -1;
+}
+
 static int ktb_destroy_client(int client_id)
 {
 	int poolid = -1;
@@ -209,7 +240,6 @@ static int ktb_destroy_client(int client_id)
 			client->this_client_all_pools[poolid] = NULL;
 			ret++;
 		}
-
 	}
 
 	if(ret == 0)
@@ -221,16 +251,15 @@ static int ktb_destroy_client(int client_id)
 	}
 
 	client->allocated = 0;
-        //ktb_all_clients[client_id] = NULL;
+        kfree(client);
+        ktb_all_clients[client_id] = NULL;
 
-	//if(can_show(ktb_destroy_client))
+	if(can_show(ktb_destroy_client))
 		pr_info(" *** mtp | successfully destroyed client: %d, flushed:"
 			" %d pools | ktb_destroy_client *** \n ",
 			client_id, ret);
-
 out:
 	return ret;
-
 }
 //static int ktb_flush_object(struct tmem_pool* pool, struct tmem_oid* oidp)
 static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
@@ -241,6 +270,9 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
 	struct tmem_client *client;
 	unsigned int oidp_hash = tmem_oid_hash(oidp);
 	int ret = -1;
+
+        tmem_invalidates++;
+        tmem_inode_invalidates++;
 
 	client = ktb_get_client_by_id(client_id);
 
@@ -266,8 +298,6 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
 
 	pool = client->this_client_all_pools[pool_id];
 
-	//pool = ktb_get_pool_by_id(client_id, pool_id);
-
 	if(unlikely(pool == NULL))
 	{
 		if(can_debug(ktb_flush_object))
@@ -292,20 +322,25 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
 		goto out;
 	}
 
+
 	write_lock(&pool->pool_rwlock);
 	tmem_obj_destroy(obj);
 	write_unlock(&pool->pool_rwlock);
 
-	//if(can_show(ktb_flush_object))
-	pr_info(" *** mtp | successfully deleted object: %llu %llu %llu rooted "
-		"at rb_tree slot: %u of pool: %u of client: %u | "
-		"ktb_flush_object*** \n", oidp->oid[2], oidp->oid[1],
-		oidp->oid[0], oidp_hash, pool->pool_id,
-		pool->associated_client->client_id);
+	if(can_show(ktb_flush_object))
+	        pr_info(" *** mtp | successfully deleted object: %llu %llu %llu"
+                        " rooted at rb_tree slot: %u of pool: %u of client: %u "
+                        " ktb_flush_object*** \n", oidp->oid[2], oidp->oid[1],
+		        oidp->oid[0], oidp_hash, pool->pool_id,
+		        pool->associated_client->client_id);
 
+        succ_tmem_invalidates++;
+        succ_tmem_inode_invalidates++;
 	return 0;
 
 out:
+        failed_tmem_invalidates++;
+        failed_tmem_inode_invalidates++;
 	return ret;
 }
 
@@ -320,6 +355,9 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
 	struct tmem_client *client;
 	unsigned int oidp_hash = tmem_oid_hash(oidp);
 	int ret = -1;
+
+        tmem_invalidates++;
+        tmem_page_invalidates++;
 
 	client = ktb_get_client_by_id(client_id);
 
@@ -389,8 +427,8 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
 		goto out;
 	}
 
-	//pgp_delist_free(pgp);
-	tmem_pgp_free(pgp);
+	tmem_pgp_delist_free(pgp);
+	//tmem_pgp_free(pgp);
 
 	if(obj->pgp_count == 0)
 	{
@@ -402,16 +440,20 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
 	{
 		spin_unlock(&obj->obj_spinlock);
 	}
-	//if(can_show(ktb_flush_page))
-	pr_info(" *** mtp | successfully deleted page with index: %u from "
-		"object: %llu %llu %llu rooted at rb_tree slot: %u of pool: %u "
-		"of client: %u | ktb_flush_page *** \n",
-		index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-		oidp_hash, pool->pool_id, client->client_id);
+	if(can_show(ktb_flush_page))
+                pr_info(" *** mtp | successfully deleted page with index: %u "
+                        "from object: %llu %llu %llu rooted at rb_tree slot: %u"
+                        " of pool: %u of client: %u | ktb_flush_page *** \n",
+                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                        oidp_hash, pool->pool_id, client->client_id);
 
+        succ_tmem_invalidates++;
+        succ_tmem_page_invalidates++;
 	return 0;
 
 out:
+        failed_tmem_invalidates++;
+        failed_tmem_page_invalidates++;
 	return (unsigned long)ret;
 }
 
@@ -425,7 +467,9 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 	unsigned int oidp_hash = tmem_oid_hash(oidp);
 	int rc = -1;
 
-    //pool->gets++;
+        //pool->gets++;
+        tmem_gets++;
+
 	client = ktb_get_client_by_id(client_id);
 
 	if(unlikely(client == NULL))
@@ -459,6 +503,7 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 				__FILE__, __func__, __LINE__, client_id);
 		goto out;
 	}
+
 
 	if(can_show(ktb_get_page))
 		pr_info(" *** mtp | Searching for object: %llu %llu %llu at "
@@ -515,7 +560,7 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 	if ( rc <= 0 )
 	{
 		rc = -1;
-        goto bad_copy;
+                goto bad_copy;
 	}
 
 	if(can_show(ktb_get_page))
@@ -526,8 +571,8 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 			oidp->oid[0], pgp->firstbyte, oidp_hash, pool->pool_id,
 			client->client_id);
 
-	//pgp_delist_free(pgp);
-	tmem_pgp_free(pgp);
+	tmem_pgp_delist_free(pgp);
+	//tmem_pgp_free(pgp);
 
 	/*I doubt if any part of the previous code dcrements obj->pgp_count*/
 	if (obj->pgp_count == 0)
@@ -554,18 +599,20 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 				oidp_hash, pool->pool_id, client->client_id);
 	}
 
-	//if(can_show(ktb_get_page))
+	if(can_show(ktb_get_page))
 		pr_info(" *** mtp | Successfully served page at index: %u, "
 			"object: %llu %llu %llu rooted at rb_tree slot: %u of "
 			"pool: %u of client: %u | ktb_get_page *** \n",
 			index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
 			oidp_hash, pool->pool_id, client->client_id);
 
+        succ_tmem_gets++;
 	return 0;
 
 bad_copy:
 	spin_unlock(&obj->obj_spinlock);
 out:
+        failed_tmem_gets++;
 	return (unsigned long)rc;
 }
 
@@ -668,13 +715,14 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
  //done:
     	/* successfully replaced data, clean up and return success */
     	spin_unlock(&obj->obj_spinlock);
-	//if(can_show(ktb_dup_put_page))
-	pr_info(" *** mtp | successfully inserted page with index: %u, "
-		"of object: %llu %llu %llu in pool: %u of client: %u | "
-		"ktb_dup_put_page *** \n",
-		pgp->index, obj->oid.oid[2], obj->oid.oid[1],
-		obj->oid.oid[0], pool->pool_id, client->client_id);
+	if(can_show(ktb_dup_put_page))
+                pr_info(" *** mtp | successfully inserted page with index: %u, "
+                        "of object: %llu %llu %llu in pool: %u of client: %u | "
+                        "ktb_dup_put_page *** \n",
+                        pgp->index, obj->oid.oid[2], obj->oid.oid[1],
+                        obj->oid.oid[0], pool->pool_id, client->client_id);
 
+        succ_tmem_puts++;
     	return 0;
 
 bad_copy:
@@ -693,6 +741,8 @@ cleanup:
     	pgpfound = tmem_pgp_delete_from_obj(obj, pgp->index);
     	ASSERT(pgpfound == pgp);
 
+        tmem_pgp_delist_free(pgpfound);
+
     	ASSERT(obj->pgp_count);
     	if(obj->pgp_count == 0)
     	{
@@ -705,6 +755,7 @@ cleanup:
         	spin_unlock(&obj->obj_spinlock);
     	}
 
+        failed_tmem_puts++;
     	return ret;
 }
 
@@ -722,13 +773,16 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
 	unsigned int oidp_hash = tmem_oid_hash(oidp);
 	//unsigned long paddr;
 
+        tmem_puts++;
 	client = ktb_get_client_by_id(client_id);
+
 	if(unlikely(client == NULL))
 	{
 		if(can_debug(ktb_put_page))
 			pr_info(" *** mtp: %s, %s, %d | No such client possible"
 				" : %d | ktb_put_page *** \n ",
 				__FILE__, __func__, __LINE__, client->client_id);
+		goto out;
 	}
 
 	if(unlikely(client->allocated == 0))
@@ -755,6 +809,7 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
 
 		goto out;
 	}
+
 
 	if(can_show(ktb_put_page))
 		pr_info(" *** mtp | Searching for object: %llu %llu %llu at "
@@ -829,7 +884,8 @@ refind:
 					__func__, __LINE__, oidp->oid[2],
 					oidp->oid[1], oidp->oid[0]);
 
-			return -1;
+                        goto out;
+			//return -1;
 		}
 
 		//pr_info(" *** mtp | allocated new object: %llu %llu %llu | "
@@ -977,7 +1033,13 @@ refind:
 
 	if (kvm_tmem_dedup_enabled)
 	{
-		if(pcd_associate(pgp, 0) == -ENOMEM)
+                int dedup_ret = pcd_associate(pgp, 0);
+
+		//if(pcd_associate(pgp, 0) == -ENOMEM)
+                //pr_info("*** mtp | dedup_ret: %d | ktb_put_page ***\n",
+                //        dedup_ret);
+
+		if(dedup_ret == -ENOMEM)
 		{
 			if(can_debug(ktb_put_page))
 				pr_info(" *** mtp: %s, %s, %d | could'nt "
@@ -995,20 +1057,55 @@ refind:
 			ret = -ENOMEM;
 			goto del_pgp_from_obj;
 		}
+                else if(dedup_ret == 1)
+                {
+                        //no match found,
+                        //insert into client remote_sharing_candidate list
+                        spin_lock(&client_list_lock);
+                        list_add_tail(&pgp->client_rscl_pgps,\
+                                        &client->remote_sharing_candidate_list);
+                        spin_unlock(&client_list_lock);
+                }
+                else if(dedup_ret == 0)
+                {
+                        //if dedup successful insert into_local_only list.
+                        spin_lock(&client_list_lock);
+                        list_add_tail(&pgp->client_lol_pgps,\
+                                        &client->local_only_list);
+                        spin_unlock(&client_list_lock);
+                }
 	}
-
+        else
+        {
+                //If no local dedup available
+                //insert into remote_sharing_candidate list 
+                spin_lock(&client_list_lock);
+                list_add_tail(&pgp->client_lol_pgps,\
+                                &client->remote_sharing_candidate_list);
+                spin_unlock(&client_list_lock);
+        }
 /*
 	code to insert this object into various lists like the
-	local_only_list, remote_sharing_candidate list,
-	remote_shared list etc goes here
+	local_only_list, remote_sharing_candidate_list,
+	remote_shared_list etc goes above this point.
+
+        Also code to update this VM's summary inline/sysnchronously with a put
+        should go after this.
 */
+        /*
+        pr_info(" *** mtp | calling make_summary() | ktb_get_page *** \n");
+        */
+        //make_summary(client_id);
+        
 	spin_unlock(&obj->obj_spinlock);
-	//if(can_show(ktb_put_page))
-	pr_info(" *** mtp | successfully inserted page with index: %u, "
-		"of object: %llu %llu %llu at rb_tree slot: %u of pool: %u "
-		"of client: %u | ktb_put_page *** \n",
-		index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-		oidp_hash, pool->pool_id, client->client_id);
+	if(can_show(ktb_put_page))
+                pr_info(" *** mtp | successfully inserted page with index: %u, "
+                        "of object: %llu %llu %llu at rb_tree slot: %u of pool:"
+                        "  %u of client: %u | ktb_put_page *** \n",
+                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                        oidp_hash, pool->pool_id, client->client_id);
+
+        succ_tmem_puts++;
 	return 0;
 
 bad_copy:
@@ -1044,6 +1141,7 @@ unlock_obj:
    	}
    	//pool->no_mem_puts++;
 out:
+        failed_tmem_puts++;
 	return (unsigned long int)ret;
 }
 
@@ -1097,10 +1195,12 @@ static unsigned long int ktb_destroy_pool(int client_id, uint32_t pool_id)
 	}
 
 	client->this_client_all_pools[pool_id] = NULL;
+
 	tmem_flush_pool(pool, client_id);
-	//if(can_show(ktb_destroy_pool))
-	pr_info(" *** mtp | Successfully destroyed pool: %d of client: %d | "
-		"ktb_destory_pool *** \n", pool_id, client_id);
+
+	if(can_show(ktb_destroy_pool))
+                pr_info(" *** mtp | Successfully destroyed pool: %d of client: "
+                        "%d | ktb_destory_pool *** \n", pool_id, client_id);
 	ret = 1;
 
 out:
@@ -1184,12 +1284,8 @@ static unsigned long int ktb_new_pool(int client_id, uint64_t uuid_lo,\
 //pr_info(" *** MODULE | CURRENT ******** pid: %d, name: %s ******** INSERTED | "
 	//"MODULE *** \n", current->pid, current->comm);
 
-	if((unsigned int)client_id < MAX_CLIENTS)
-	{
-		//client = &ktb_all_clients[client_id];
-		ktb_new_client(client_id)?\
-			(client = &ktb_all_clients[client_id]):(client = NULL);
-	}
+        client = ktb_get_client_by_id(client_id);
+
 	/*If no such client found*/
 	if(client == NULL)
 	{
@@ -1283,14 +1379,14 @@ static struct kvm_host_tmem_ops ktb_ops = {
 	.kvm_host_flush_page = ktb_flush_page,
 	.kvm_host_flush_object = ktb_flush_object,
 	.kvm_host_destroy_pool = ktb_destroy_pool,
-
-	/* Implement this, this is being called from arch/x86/kvm/x86.c,
-	 * via kvm_tmem_backend (kvm_tmem.c),
-	 * when a VM is destroyed in kvm_arch_destroy_vm function
+	/* Implement these, these are being called from 
+         * destroy_client: 
+         * arch/x86/kvm/x86.c, via kvm_tmem_backend (kvm_tmem.c).
+         * create_client:
+         * from kvm_tmem_backend (kvm_tmem.c)
 	 */
-
+	.kvm_host_create_client = ktb_create_client,
 	.kvm_host_destroy_client = ktb_destroy_client,
-	//.kvm_host_destroy_client = NULL,
 };
 /******************************************************************************/
 /* 				              END kvm_host_tmem_ops DEFINITION*/
@@ -1303,6 +1399,7 @@ static int __init ktb_main_init(void)
 {
 	int i;
 	char *s = "kvm_tmem_bknd";
+        //struct dentry *root = NULL;
 
 	pr_info(" *** mtp | INSERTED ********kvm_tmem_bknd******** INSERTED | "
 		"ktb_main_init *** \n");
@@ -1356,8 +1453,65 @@ static int __init ktb_main_init(void)
 				pcd_tree_roots[i] = RB_ROOT;
 				rwlock_init(&pcd_tree_rwlocks[i]);
 			}
+
+                        //INIT_LIST_HEAD(&lol.list_lol_node);
 		}
+
+                //INIT_LIST_HEAD(&rscl.list_rscl_node);
 	}
+
+        /*
+         * debugfs entries
+         */
+#ifdef CONFIG_DEBUG_FS
+        root = debugfs_create_dir("kvm_tmem_bknd", NULL);
+
+        if(root != NULL)
+        {
+                debugfs_create_u64("puts", S_IRUGO, root, &tmem_puts);
+                debugfs_create_u64("puts_succ", S_IRUGO, root, &succ_tmem_puts);
+                debugfs_create_u64("puts_failed", S_IRUGO, root,\
+                                &failed_tmem_puts);
+        
+                debugfs_create_u64("gets", S_IRUGO, root, &tmem_gets);
+                debugfs_create_u64("gets_succ", S_IRUGO, root, &succ_tmem_gets);
+                debugfs_create_u64("gets_failed", S_IRUGO, root,\
+                                &failed_tmem_gets);
+
+                debugfs_create_u64("dedups", S_IRUGO, root, &tmem_dedups);
+                debugfs_create_u64("dedups_succ", S_IRUGO, root,\
+                                &succ_tmem_dedups);
+                debugfs_create_u64("dedups_failed", S_IRUGO, root,\
+                                &failed_tmem_dedups);
+
+                debugfs_create_u64("invalidates", S_IRUGO, root,\
+                                &tmem_invalidates);
+                debugfs_create_u64("invalidates_succ", S_IRUGO, root,\
+                                &succ_tmem_invalidates);
+                debugfs_create_u64("invalidates_failed", S_IRUGO, root,\
+                                &failed_tmem_invalidates);
+
+                debugfs_create_u64("inode_invalidates", S_IRUGO, root,\
+                                &tmem_inode_invalidates);
+                debugfs_create_u64("inode_invalidates_succ", S_IRUGO, root,\
+                                &succ_tmem_inode_invalidates);
+                debugfs_create_u64("inode_invalidates_failed", S_IRUGO, root,\
+                                &failed_tmem_inode_invalidates);
+
+                debugfs_create_u64("page_invalidates", S_IRUGO, root,\
+                                &tmem_page_invalidates);
+                debugfs_create_u64("page_invalidates_succ", S_IRUGO, root,\
+                                &succ_tmem_page_invalidates);
+                debugfs_create_u64("page_invalidates_failed", S_IRUGO, root,\
+                                &failed_tmem_page_invalidates);
+
+        }
+#endif
+                
+
+        /*
+         * end debugfs entries
+         */
 
 	/*
 	 * debug(function): Specify functions you want to debug.
@@ -1372,15 +1526,16 @@ static int __init ktb_main_init(void)
 	//----------------------------
 	//en/dis-able ktb_main.c debug
 	//----------------------------
-	/*
 	debug(ktb_new_pool);
+	/*
 	debug(ktb_put_page);
 	debug(ktb_dup_put_page);
 	debug(ktb_get_page);
 	debug(ktb_flush_page);
 	debug(ktb_flush_object);
-	debug(ktb_destroy_client);
         */
+	debug(ktb_destroy_pool);
+	debug(ktb_destroy_client);
 	//end en/dis-able ktb_main.c debug
 
 	//-------------------------
@@ -1391,42 +1546,58 @@ static int __init ktb_main_init(void)
 	debug(pcd_disassociate);
 	debug(tmem_pgp_free);
 	debug(tmem_pgp_free_data);
-	*/
 	debug(tmem_pgp_destroy);
 	debug(tmem_pool_destroy_objs);
 	debug(custom_radix_tree_destroy);
 	debug(custom_radix_tree_node_destroy);
+	*/
 	// end en/dis-able tmem.c debug
 
+	//---------------------------
+	//en/dis-able remote.c debug
+	//---------------------------
+        /*
+        debug(make_summary);
+        */
+	// end en/dis-able remote.c debug 
 
 	//------------------------------
 	// en/dis-able ktb_main.c output
 	//------------------------------
-	/*
 	show_msg(ktb_new_pool);
+	/*
 	show_msg(ktb_put_page);
 	show_msg(ktb_dup_put_page);
 	show_msg(ktb_get_page);
 	show_msg(ktb_flush_page);
 	show_msg(ktb_flush_object);
-	show_msg(ktb_destroy_client);
         */
+	show_msg(ktb_destroy_pool);
+	show_msg(ktb_destroy_client);
 	//end en/dis-able ktb_main.c output
 
 	//-------------------------
 	//en/dis-able tmem.c output
 	//-------------------------
-	/*
 	show_msg(pcd_associate);
+	/*
 	show_msg(pcd_disassociate);
 	show_msg(tmem_pgp_free);
 	show_msg(tmem_pgp_free_data);
-        */
 	show_msg(tmem_pgp_destroy);
 	show_msg(tmem_pool_destroy_objs);
 	show_msg(custom_radix_tree_destroy);
 	show_msg(custom_radix_tree_node_destroy);
+        */
 	// end en/dis-able tmem.c output
+        
+	//---------------------------
+	//en/dis-able remote.c output
+	//---------------------------
+        /*
+        show_msg(make_summary);
+        */
+	// end en/dis-able remote.c output
 
 	return 0;
 }
@@ -1445,9 +1616,11 @@ static void __exit ktb_main_exit(void)
 	ktb_ops.kvm_host_flush_page = NULL;
 	ktb_ops.kvm_host_flush_object = NULL;
 	ktb_ops.kvm_host_destroy_pool = NULL,
+	ktb_ops.kvm_host_create_client = NULL,
 	ktb_ops.kvm_host_destroy_client = NULL,
 
 	kvm_host_tmem_deregister_ops();
+        debugfs_remove_recursive(root);
 
 	pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED | "
 		"ktb_main_exit *** \n");

@@ -28,6 +28,10 @@ extern int show_msg_tmem_pgp_free;
 extern int show_msg_tmem_pgp_free_data;
 extern int show_msg_custom_radix_tree_destroy;
 extern int show_msg_custom_radix_tree_node_destroy;
+
+extern u64 tmem_dedups;
+extern u64 succ_tmem_dedups;
+extern u64 failed_tmem_dedups;
 /******************************************************************************/
 /*					 	       END EXTERN DECLARATIONS*/
 /******************************************************************************/
@@ -45,6 +49,7 @@ static void tmem_free_page(struct page* );
 /******************************************************************************/
 /*						   CUSTOM RADIX TREE FUNCTIONS*/
 /******************************************************************************/
+/*
 static void custom_radix_tree_node_destroy(struct radix_tree_root *root,\
 		struct radix_tree_node *node, void (*slot_free)(void *),\
 		unsigned long level, unsigned long curr_slot)
@@ -75,6 +80,7 @@ static void custom_radix_tree_node_destroy(struct radix_tree_root *root,\
 			continue;
 		}
 		//if(node->height == 1)
+ */
                 /*
 		if(can_debug(custom_radix_tree_node_destroy))
 			pr_info(" *** mtp | MAP_SHIFT: %d, "
@@ -93,6 +99,7 @@ static void custom_radix_tree_node_destroy(struct radix_tree_root *root,\
 				RADIX_TREE_HEIGHT_MASK,
 				(node->path & RADIX_TREE_HEIGHT_MASK));
                 */
+/*
                 if(can_debug(custom_radix_tree_node_destroy))
                         pr_info(" *** mtp | node->slot[%d] != NULL | "
                                 "custom_radix_tree_node_destroy *** \n", i);
@@ -110,9 +117,8 @@ static void custom_radix_tree_node_destroy(struct radix_tree_root *root,\
 				        node->path & RADIX_TREE_HEIGHT_MASK, 
                                         curr_slot);
 			    slot_free(slot);
-                            /* should i check for and clear all tags explicitly
-                             * here?? Seems to work fine without that!
-                             */
+                            // should i check for and clear all tags explicitly
+                            // here?? Seems to work fine without that!
                             node->slots[i] = NULL;
                             node->count--;
 		    }
@@ -199,7 +205,42 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
     	//radix_tree_init(root);
 	INIT_RADIX_TREE(root, GFP_ATOMIC);
 }
+*/
+void custom_radix_tree_destroy(struct radix_tree_root *root,\
+		void (*slot_free)(void *))
+{
+        struct radix_tree_iter iter;
+        void **slot;
 
+        radix_tree_for_each_slot(slot, root, &iter, 0)
+        {
+                //struct tmem_page_descriptor *pgp = 
+                //        (struct tmem_page_descriptor *)*slot;
+                struct tmem_page_descriptor *pgp = 
+                        radix_tree_deref_slot(slot);
+                //pr_info(" *** mtp | index being deleted: %u | "
+                //        "custom_radix_tree_destroy *** \n",
+                //         pgp->index);
+
+                if(radix_tree_delete(root, pgp->index) == NULL)
+                {
+                       if(can_show(custom_radix_tree_destroy)) 
+                                pr_info(" *** mtp | item at index not present: "
+                                        "%u | custom_radix_tree_destroy *** \n",
+                                        pgp->index);
+                } 
+                else
+                {
+                       if(can_show(custom_radix_tree_destroy)) 
+                                pr_info(" *** mtp | success, item at index "
+                                        "present: %u | "
+                                        "custom_radix_tree_destroy *** \n",
+                                        pgp->index);
+                        slot_free(pgp);
+                }
+
+        }
+}
 /******************************************************************************/
 /*					       END CUSTOM RADIX TREE FUNCTIONS*/
 /******************************************************************************/
@@ -254,6 +295,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	root = &pcd_tree_roots[firstbyte];
 	new = &(root->rb_node);
 
+        tmem_dedups++;
+
 	if(can_show(pcd_associate))
 		pr_info(" *** mtp | Looking to de-duplicate page with index: "
 			"%u of object: %llu %llu %llu rooted at rb_tree slot: "
@@ -287,27 +330,31 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 		}
 		else
 		{
-			//if(can_show(pcd_associate))
+			if(can_show(pcd_associate))
 				pr_info(" *** mtp | Got a match to de-duplicate"
 					" page with index: %u of object: %llu "
 					"%llu %llu rooted at rb_tree slot: %u "
 					"of pool: %u of client: %u, having "
 					"firstbyte: %u | pcd_associate *** \n",
 					pgp->index, pgp->obj->oid.oid[2],
-					pgp->obj->oid.oid[1],pgp->obj->oid.oid[0],
+				pgp->obj->oid.oid[1],pgp->obj->oid.oid[0],
 				       	tmem_oid_hash(&(pgp->obj->oid)),
 					pgp->obj->pool->pool_id,
 				pgp->obj->pool->associated_client->client_id,
 					firstbyte);
 		 	//match! free the no-longer-needed page
 			//tmem_free_page(pgp->obj->pool, pgp->tmem_page);
-			tmem_free_page(pgp->tmem_page);
-		 	deduped_puts++;
+		 	//deduped_puts++;
+                        succ_tmem_dedups++;
+                        tmem_free_page(pgp->tmem_page);
 			goto match;
 		}
 	}
 
-	//if(can_show(pcd_associate))
+        ret = 1;
+        failed_tmem_dedups++;
+
+	if(can_show(pcd_associate))
 		pr_info(" *** mtp | Found no match to de-duplicate page with "
 			"index: %u of object: %llu %llu %llu rooted at rb_tree "
 			"slot: %u of pool: %u of client: %u, having firstbyte: "
@@ -392,7 +439,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	 //If more pgps are referring this pcd then you return from here itself
 	if (--pcd->pgp_ref_count)
 	{
-		//if(can_show(pcd_disassociate))
+		if(can_show(pcd_disassociate))
 			pr_info(" *** mtp | Diassociating page with index: %u "
 				"of object: %llu %llu %llu rooted at rb_tree "
 				"slot: %u of pool: %u of client: %u, having "
@@ -409,12 +456,12 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		return;
 	}
 
-	//if(can_show(pcd_disassociate))
-	pr_info(" *** mtp | Diassociating page with index: %u of object: "
-		"%llu %llu %llu rooted at rb_tree slot: %u of pool: %u "
-		"of client: %u, having firstbyte: %u from it's page "
-		"content descriptor (NO MORE REF TO THIS PAGE)| "
-		"pcd_disassociate *** \n",
+	if(can_show(pcd_disassociate))
+                pr_info(" *** mtp | Diassociating page with index: %u of object:"
+                        " %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
+                        " of client: %u, having firstbyte: %u from it's page "
+                        "content descriptor (NO MORE REF TO THIS PAGE)| "
+                        "pcd_disassociate *** \n",
 		pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 		pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 		pgp->obj->pool->pool_id,
@@ -584,6 +631,7 @@ void tmem_pgp_free(struct tmem_page_descriptor *pgp)
 
 	pool = pgp->obj->pool;
 
+        /*
 	if(can_show(tmem_pgp_free))
 		pr_info(" *** mtp | freeing pgp of page with index: %u, "
 			"of object: %llu %llu %llu in pool: %d, of client: %d "
@@ -591,13 +639,28 @@ void tmem_pgp_free(struct tmem_page_descriptor *pgp)
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id);
-
+        */
 	tmem_pgp_free_data(pgp);
 
 	//pgp->size = -1;
 	pgp->obj = NULL;
 	pgp->index = -1;
 	kmem_cache_free(tmem_page_descriptors_cachep, pgp);
+        if(can_show(tmem_pgp_free))
+                pr_info(" *** mtp | kmem_cache_free done | *** \n");
+}
+
+void tmem_pgp_delist_free(struct tmem_page_descriptor *pgp)
+{
+       spin_lock(&client_list_lock); 
+
+       if(!list_empty(&pgp->client_rscl_pgps))
+               list_del_init(&pgp->client_rscl_pgps);
+       else if(!list_empty(&pgp->client_lol_pgps))
+               list_del_init(&pgp->client_lol_pgps);
+       
+       spin_unlock(&client_list_lock); 
+       tmem_pgp_free(pgp);
 }
 
 static void tmem_pgp_destroy(void *v)
@@ -606,7 +669,6 @@ static void tmem_pgp_destroy(void *v)
 
 	ASSERT(pgp);
 	pgp->obj->pgp_count--;
-	//pgp_delist_free(pgp);
 	if(can_show(tmem_pgp_destroy))
 		pr_info(" *** mtp | destroying pgp of page with index: %u, "
 			"of object: %llu %llu %llu in pool: %d, of client: %d "
@@ -615,7 +677,8 @@ static void tmem_pgp_destroy(void *v)
 			pgp->obj->oid.oid[0], pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id);
 
-   	tmem_pgp_free(pgp);
+	tmem_pgp_delist_free(pgp);
+        //tmem_pgp_free(pgp);
 }
 
 struct tmem_page_descriptor *tmem_pgp_delete_from_obj\
@@ -682,8 +745,8 @@ struct tmem_page_descriptor *tmem_pgp_alloc(struct tmem_object_root *obj)
 	}
 
 	//pgp->us.obj = obj;
-	//INIT_LIST_HEAD(&pgp->global_eph_pages);
-	//INIT_LIST_HEAD(&pgp->us.client_eph_pages);
+	INIT_LIST_HEAD(&pgp->client_rscl_pgps);
+	INIT_LIST_HEAD(&pgp->client_lol_pgps);
 	pgp->tmem_page = NULL;
 
 	if(kvm_tmem_dedup_enabled)

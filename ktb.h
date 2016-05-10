@@ -5,6 +5,7 @@
 #include <linux/rwlock.h>
 #include <linux/rbtree.h> 
 #include <linux/radix-tree.h>
+#include <linux/list.h>
 
 #define LOCAL_CLIENT ((uint16_t) - 1)
 #define TMEM_CLIENT 1
@@ -59,8 +60,9 @@ struct tmem_client {
 	/*Each pool corresponds to a fs in a client*/
 	uint16_t client_id;
 	struct tmem_pool *this_client_all_pools[MAX_POOLS_PER_CLIENT];
+        struct list_head remote_sharing_candidate_list;
+        struct list_head local_only_list;
 	bool allocated;
-
 	/*refcount: What is this for??*/
 	//atomic_t refcount;
     	//long eph_count;
@@ -185,6 +187,9 @@ struct tmem_page_descriptor {
 	struct page* tmem_page;  // page frame pointer 
 	struct tmem_page_content_descriptor *pcd; // page dedup 
 	uint32_t pool_id;  // used for invalid list only
+
+        struct list_head client_rscl_pgps;
+        struct list_head client_lol_pgps; 
 	/*
 	union 
 	{
@@ -235,16 +240,18 @@ struct tmem_page_content_descriptor {
 /******************************************************************************/
 /*		 	     End KTB pool object PAGE  related data structures*/
 /******************************************************************************/
-
-extern long long deduped_puts;
+//extern long long deduped_puts;
 extern struct rb_root pcd_tree_roots[256]; // choose based on first byte of page
 extern rwlock_t pcd_tree_rwlocks[256]; // poor man's concurrency for now
+extern spinlock_t client_list_lock;
 
 extern struct kmem_cache* tmem_page_descriptors_cachep;
 extern struct kmem_cache* tmem_page_content_desc_cachep;
 extern struct kmem_cache* tmem_objects_cachep;
 extern struct kmem_cache* tmem_object_nodes_cachep;
 
+extern struct local_only_list lol;
+extern struct remote_sharing_candidate_list rscl;
 /*tmem pool functions*/
 extern void tmem_new_pool(struct tmem_pool* , uint32_t );
 extern void tmem_flush_pool(struct tmem_pool*, int);
@@ -265,7 +272,7 @@ extern int tmem_pgp_add_to_obj(struct tmem_object_root*, uint32_t,\
 		struct tmem_page_descriptor*);
 extern struct tmem_page_descriptor* tmem_pgp_lookup_in_obj(\
 		struct tmem_object_root* , uint32_t);
-
+extern void tmem_pgp_delist_free(struct tmem_page_descriptor*);
 extern void tmem_pgp_free(struct tmem_page_descriptor*);
 extern void tmem_pgp_free_data(struct tmem_page_descriptor *);    
 extern struct tmem_page_descriptor* tmem_pgp_delete_from_obj(\
@@ -286,4 +293,6 @@ extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 bool  __radix_tree_delete_node(struct radix_tree_root*, struct radix_tree_node*); 
 void* indirect_to_ptr(void *);
 
+/*list functions*/
+extern void make_summary(int);
 #endif /*_KTB_H_*/

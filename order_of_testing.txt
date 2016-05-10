@@ -1,0 +1,48 @@
+Setup
+-----
+
+1. Clear logs in PM.
+        PM: sudo ~/clear_logs.sh
+
+2. Start recording kernel message buffer output.
+        PM: sudo ~/get_dmesg_out.sh logfile
+
+3. Insert module.
+        PM: sudo insmod ~mtp/work_area/kvm_tmem_backnd_module/ktb.ko
+
+4. Start VM.
+        PM: sudo ~/start_guest.sh
+
+5. Login to VM.
+        PM: ssh aby-guest@10.129.41.201
+
+Obtaining Initial Values and comparing the output
+-------------------------------------------------
+
+6. Move to test folder.
+        VM: cd ~/mtp/tests
+
+7. Get cleancache debugfs output and transfer it to Host.
+        VM: sudo ~/mtp/tests/transfer_cleancache_report.sh
+
+8. Get host kvm_tmem_bknd debugfs values and compare it with cleancache values
+   obtained in the above step.
+        PM: sudo ~/comapare_tmem_cleancache_reports.sh
+
+9. These are the initial values before the test is done.
+
+10. Comapre the values directly in VM and PM from the respective debugfs.
+        VM: sudo su
+        VM: grep "" /sys/kernel/debug/cleancache/*
+        
+        PM: sudo su
+        PM: grep "" /sys/kernel/debug/kvm_tmem_bknd/*
+
+Running the test and comparing the output
+-----------------------------------------
+
+11. Run the test in VM (i.e. cat the ~/mtp/tests/zero_file).
+        VM: ~/mtp/tests/test.sh
+
+12. Repeat steps 7, 8 and 10. 
+
