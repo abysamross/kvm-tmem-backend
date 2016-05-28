@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/debugfs.h>
 //#include <linux/spinlock.h>
+#include "bloom_filter.h"
 #include "ktb.h"
 
 #define mtp_debug 0
@@ -23,18 +24,17 @@ struct kmem_cache* tmem_page_descriptors_cachep;
 struct kmem_cache* tmem_page_content_desc_cachep;
 struct kmem_cache* tmem_objects_cachep;
 struct kmem_cache* tmem_object_nodes_cachep;
-
+struct bloom_filter* tmem_system_bloom_filter;
 /* choose based on first byte of page*/ 
-struct rb_root pcd_tree_roots[256]; 
+struct tmem_system_view tmem_system;
+//struct rb_root pcd_tree_roots[256]; 
 /* poor man's concurrency for now */
-rwlock_t pcd_tree_rwlocks[256]; 
+//rwlock_t pcd_tree_rwlocks[256]; 
 //long long deduped_puts;
 /******************************************************************************/ 
 /*                                                      List global variables */
 /******************************************************************************/ 
-DEFINE_SPINLOCK(client_list_lock);
-//DEFINE_SPINLOCK(lol_lock);
-
+//DEFINE_SPINLOCK(client_list_lock);
 /******************************************************************************/ 
 /*                                                  End list global variables */
 /******************************************************************************/ 
@@ -58,7 +58,9 @@ int debug_tmem_pgp_free = 0;
 int debug_tmem_pgp_free_data = 0;
 int debug_custom_radix_tree_destroy = 0;
 int debug_custom_radix_tree_node_destroy = 0;
-int debug_make_summary = 0;
+int debug_update_summary = 0;
+int debug_bloom_filter_add = 0;
+int debug_bloom_filter_check = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -76,7 +78,9 @@ int show_msg_tmem_pgp_free = 0;
 int show_msg_tmem_pgp_free_data = 0;
 int show_msg_custom_radix_tree_destroy = 0;
 int show_msg_custom_radix_tree_node_destroy = 0;
-int show_msg_make_summary = 0;
+int show_msg_update_summary = 0;
+int show_msg_bloom_filter_add = 0;
+int show_msg_bloom_filter_check = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
 /******************************************************************************/ 
@@ -193,8 +197,8 @@ static int ktb_create_client(int client_id)
         client->client_id = client_id;
         client->allocated = 1;
 
-        INIT_LIST_HEAD(&client->remote_sharing_candidate_list);
-        INIT_LIST_HEAD(&client->local_only_list);
+        //INIT_LIST_HEAD(&client->remote_sharing_candidate_list);
+        //INIT_LIST_HEAD(&client->local_only_list);
 
         ktb_all_clients[client_id] = client;
         return 0;
@@ -1039,6 +1043,11 @@ refind:
                 //pr_info("*** mtp | dedup_ret: %d | ktb_put_page ***\n",
                 //        dedup_ret);
 
+        /* Many pgps can point to the same system page (pcd), */
+        /* pgps cannot be used to for remote dedup. Since using pgps can */
+        /* result in setting the bits in bloom filter multiple times, an */
+        /* overhead. */   
+
 		if(dedup_ret == -ENOMEM)
 		{
 			if(can_debug(ktb_put_page))
@@ -1061,36 +1070,44 @@ refind:
                 {
                         //no match found,
                         //insert into client remote_sharing_candidate list
-                        spin_lock(&client_list_lock);
-                        list_add_tail(&pgp->client_rscl_pgps,\
-                                        &client->remote_sharing_candidate_list);
-                        spin_unlock(&client_list_lock);
+                        spin_lock(&(tmem_system.system_list_lock));
+                        list_add_tail(&(pgp->pcd->system_rscl_pcds),\
+                                &(tmem_system.remote_sharing_candidate_list));
+                        spin_unlock(&(tmem_system.system_list_lock));
+                        update_summary(pgp);
                 }
+                /*
+                 * This is not needed as only the matched pcd is to be moved
+                 * from the rscl to lol.
                 else if(dedup_ret == 0)
                 {
                         //if dedup successful insert into_local_only list.
-                        spin_lock(&client_list_lock);
-                        list_add_tail(&pgp->client_lol_pgps,\
-                                        &client->local_only_list);
-                        spin_unlock(&client_list_lock);
+                        spin_lock(&(tmem_system.system_list_lock));
+                        list_add_tail(&(pgp->pcd->system_lol_pcds),\
+                                &(tmem_system.local_only_list));
+                        spin_unlock(&(tmem_system.system_list_lock));
                 }
+                */
 	}
         else
         {
                 //If no local dedup available
                 //insert into remote_sharing_candidate list 
-                spin_lock(&client_list_lock);
-                list_add_tail(&pgp->client_lol_pgps,\
-                                &client->remote_sharing_candidate_list);
-                spin_unlock(&client_list_lock);
+                spin_lock(&(tmem_system.system_list_lock));
+                list_add_tail(&(pgp->pcd->system_rscl_pcds),\
+                        &(tmem_system.remote_sharing_candidate_list));
+                spin_unlock(&(tmem_system.system_list_lock));
         }
 /*
 	code to insert this object into various lists like the
 	local_only_list, remote_sharing_candidate_list,
 	remote_shared_list etc goes above this point.
 
-        Also code to update this VM's summary inline/sysnchronously with a put
+        Also code to update this VM's summary inline/synchronously with a put
         should go after this.
+
+        We can also add the pcd instead of the pgp. As the number of pcds are 
+        less than pgps. Then it becomes a host wide summary instead of per VM.
 */
         /*
         pr_info(" *** mtp | calling make_summary() | ktb_get_page *** \n");
@@ -1128,16 +1145,16 @@ unlock_obj:
    	{
 		//int* hola = NULL;
 		//ASSERT(hola);
-      	spin_unlock(&obj->obj_spinlock);
-       	write_lock(&pool->pool_rwlock);
-       	tmem_obj_free(obj);
-       	write_unlock(&pool->pool_rwlock);
+                spin_unlock(&obj->obj_spinlock);
+                write_lock(&pool->pool_rwlock);
+                tmem_obj_free(obj);
+                write_unlock(&pool->pool_rwlock);
    	}
 	else
    	{
 		//int* amigo = NULL;
 		//ASSERT(amigo);
-       	spin_unlock(&obj->obj_spinlock);
+       	        spin_unlock(&obj->obj_spinlock);
    	}
    	//pool->no_mem_puts++;
 out:
@@ -1450,14 +1467,44 @@ static int __init ktb_main_init(void)
 		{
 			for(i = 0; i < 256; i++)
 			{
-				pcd_tree_roots[i] = RB_ROOT;
-				rwlock_init(&pcd_tree_rwlocks[i]);
+				tmem_system.pcd_tree_roots[i] = RB_ROOT;
+				rwlock_init(&(tmem_system.pcd_tree_rwlocks[i]));
 			}
-
-                        //INIT_LIST_HEAD(&lol.list_lol_node);
+                INIT_LIST_HEAD(&(tmem_system.remote_sharing_candidate_list));
+                        INIT_LIST_HEAD(&(tmem_system.local_only_list));
+                        spin_lock_init(&(tmem_system.system_list_lock));
 		}
 
-                //INIT_LIST_HEAD(&rscl.list_rscl_node);
+                //start the tcp server
+                network_server_init();
+                //initialize bloom filter,
+                //mention size of bit_map,
+                //add the hash functions to be used by the bloom etc
+                //size of bit_map = 2^28 or 32 MB
+                tmem_system_bloom_filter = bloom_filter_new(268435456);
+                if(IS_ERR(tmem_system_bloom_filter))
+                {
+                        pr_info(" *** mtp | failed to allocate bloom_filter "
+                                "| ktb_main_init *** \n");
+                        //set error flag
+                        return 0;
+                }
+                else
+                        pr_info(" *** mtp | successfully allocated bloom_filter"
+                                " | ktb_main_init *** \n");
+
+
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
+                                        "crc32c"))
+                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                                "failed | ktb_main_init *** \n");
+
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
+                                        "sha1"))
+                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                                "failed | ktb_main_init *** \n");
+
+                bloom_filter_reset(tmem_system_bloom_filter);
 	}
 
         /*
@@ -1556,10 +1603,17 @@ static int __init ktb_main_init(void)
 	//---------------------------
 	//en/dis-able remote.c debug
 	//---------------------------
-        /*
-        debug(make_summary);
-        */
+        //debug(update_summary);
 	// end en/dis-able remote.c debug 
+
+	//---------------------------
+	//en/dis-able bloom_filter.c debug 
+	//---------------------------
+        //debug(bloom_filter_add);
+        //debug(bloom_filter_check);
+	// end en/dis-able bloom_filter.c debug 
+
+        /******************************/
 
 	//------------------------------
 	// en/dis-able ktb_main.c output
@@ -1579,7 +1633,7 @@ static int __init ktb_main_init(void)
 	//-------------------------
 	//en/dis-able tmem.c output
 	//-------------------------
-	show_msg(pcd_associate);
+	//show_msg(pcd_associate);
 	/*
 	show_msg(pcd_disassociate);
 	show_msg(tmem_pgp_free);
@@ -1594,11 +1648,15 @@ static int __init ktb_main_init(void)
 	//---------------------------
 	//en/dis-able remote.c output
 	//---------------------------
-        /*
-        show_msg(make_summary);
-        */
+        show_msg(update_summary);
 	// end en/dis-able remote.c output
 
+	//---------------------------
+	//en/dis-able bloom_filter.c output
+	//---------------------------
+        show_msg(bloom_filter_add);
+        show_msg(bloom_filter_check);
+	// end en/dis-able bloom_filter.c output
 	return 0;
 }
 /******************************************************************************/
@@ -1621,6 +1679,14 @@ static void __exit ktb_main_exit(void)
 
 	kvm_host_tmem_deregister_ops();
         debugfs_remove_recursive(root);
+        bloom_filter_reset(tmem_system_bloom_filter);
+        if(bloom_filter_unref(tmem_system_bloom_filter))
+                pr_info(" *** mtp | tmem_system_bloom_filter removed "
+                        "successfully | ktb_main_exit \n");
+        else
+                pr_info(" *** mtp | failed to remove tmem_system_bloom_filter "
+                        "| ktb_main_exit \n");
+        network_server_exit();
 
 	pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED | "
 		"ktb_main_exit *** \n");

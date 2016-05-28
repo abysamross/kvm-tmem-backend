@@ -40,7 +40,7 @@ extern u64 failed_tmem_dedups;
 /*					 	    STATIC FUNCTION PROTOTYPES*/
 /******************************************************************************/
 static int tmem_page_cmp(struct page *, struct page *);
-static uint8_t tmem_get_first_byte(struct page* );
+//static uint8_t tmem_get_first_byte(struct page* );
 static void tmem_free_page(struct page* );
 /******************************************************************************/
 /*					 	END STATIC FUNCTION PROTOTYPES*/
@@ -256,12 +256,12 @@ int tmem_pcd_copy_to_client(struct page* client_page,\
 	int ret;
 
 	ASSERT(kvm_tmem_dedup_enabled);
-	read_lock(&pcd_tree_rwlocks[firstbyte]);
+	read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	pcd = pgp->pcd;
 
 	//ret = tmem_copy_to_client(cmfn, pcd->pfp, tmem_cli_buf_null);
 	ret = tmem_copy_to_client(client_page, pcd->system_page);
-	read_unlock(&pcd_tree_rwlocks[firstbyte]);
+	read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	return ret;
 }
 
@@ -291,8 +291,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	ASSERT(!(tmem_page_size & (sizeof(uint64_t)-1)));
 
 	//Accessing the pcd rb trees
-	write_lock(&pcd_tree_rwlocks[firstbyte]);
-	root = &pcd_tree_roots[firstbyte];
+	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+	root = &(tmem_system.pcd_tree_roots[firstbyte]);
 	new = &(root->rb_node);
 
         tmem_dedups++;
@@ -346,6 +346,20 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 			//tmem_free_page(pgp->obj->pool, pgp->tmem_page);
 		 	//deduped_puts++;
                         succ_tmem_dedups++;
+
+                /* If the matched pcd is from rscl then move it to lol. */
+                /* I don't have a reference to a pgp here. This means that */
+                /* I have to do remote dedup also based on pcds. */
+                /* i.e. the summaries should hold pcds. */
+                        spin_lock(&(tmem_system.system_list_lock));
+                        if(!list_empty(&pcd->system_rscl_pcds))
+                        {
+                                list_del_init(&pcd->system_rscl_pcds); 
+                                list_add_tail(&pcd->system_lol_pcds,\
+                                                &(tmem_system.local_only_list));
+                        }
+                        spin_unlock(&(tmem_system.system_list_lock));
+
                         tmem_free_page(pgp->tmem_page);
 			goto match;
 		}
@@ -389,9 +403,12 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	}
 
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
-	//INIT_LIST_HEAD(&pcd->pgp_list);
+	INIT_LIST_HEAD(&pcd->system_rscl_pcds);
+	INIT_LIST_HEAD(&pcd->system_lol_pcds);
 	//Point pcd->system_page to client page contents now available in
 	//pgp->tmem_page
+        /*line beloew is a just for testing correctness*/
+        pcd->pgp = pgp;
 	pcd->system_page = pgp->tmem_page;
 	pcd->size = PAGE_SIZE;
 	pcd->pgp_ref_count = 0;
@@ -406,7 +423,7 @@ match:
 	//pgp->eviction_attempted = 0;
 	pgp->pcd = pcd;
 unlock:
-	write_unlock(&pcd_tree_rwlocks[firstbyte]);
+	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	return ret;
 }
 
@@ -430,13 +447,15 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	//if(have_pcd_rwlock)
 	 //ASSERT_WRITELOCK(&pcd_tree_rwlocks[firstbyte]);
 	//else
-	 write_lock(&pcd_tree_rwlocks[firstbyte]);
+	 write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
 	pgp->pcd = NULL;
 	pgp->firstbyte = NOT_SHAREABLE;
 	pgp->size = -1;
 
 	 //If more pgps are referring this pcd then you return from here itself
+         //Also then this pcd is certainly in local_only_list and you shouldn't
+         //remove it from this list.
 	if (--pcd->pgp_ref_count)
 	{
 		if(can_show(pcd_disassociate))
@@ -452,7 +471,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 				pgp->obj->pool->associated_client->client_id,
 				firstbyte);
 
-		write_unlock(&pcd_tree_rwlocks[firstbyte]);
+		write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 		return;
 	}
 
@@ -468,16 +487,28 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		pgp->obj->pool->associated_client->client_id, firstbyte);
 
 	//no more references to this pcd, recycle it and the physical page
+        //Also this pcd can be either in remote_sharing_candidate_list or
+        //local_only_list
+
+        spin_lock(&(tmem_system.system_list_lock)); 
+        if(!list_empty(&pcd->system_rscl_pcds))
+                list_del_init(&pcd->system_rscl_pcds);
+        else if(!list_empty(&pcd->system_lol_pcds))
+                list_del_init(&pcd->system_lol_pcds);
+        spin_unlock(&(tmem_system.system_list_lock)); 
+
+        pcd->pgp = NULL;
 	pcd->system_page = NULL;
 	//remove pcd from rbtree
-	rb_erase(&pcd->pcd_rb_tree_node, &pcd_tree_roots[firstbyte]);
+	rb_erase(&pcd->pcd_rb_tree_node,\
+                        &(tmem_system.pcd_tree_roots[firstbyte]));
 	//reinit the struct for safety for now
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
 	//now free up the pcd memory
 	kmem_cache_free(tmem_page_content_desc_cachep, pcd);
 	//free up the system page that pcd held
 	tmem_free_page(system_page);
-	write_unlock(&pcd_tree_rwlocks[firstbyte]);
+	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 }
 /******************************************************************************/
 /*					         END MAIN PCD & DEDUP ROUTINES*/
@@ -496,7 +527,7 @@ static void tmem_free_page(struct page* page)
 		__free_page(page);
 }
 
-static uint8_t tmem_get_first_byte(struct page* tmem_page)
+uint8_t tmem_get_first_byte(struct page* tmem_page)
 {
 	const uint8_t *p = page_address(tmem_page);
 	uint8_t byte = p[0];
@@ -652,6 +683,7 @@ void tmem_pgp_free(struct tmem_page_descriptor *pgp)
 
 void tmem_pgp_delist_free(struct tmem_page_descriptor *pgp)
 {
+        /*
        spin_lock(&client_list_lock); 
 
        if(!list_empty(&pgp->client_rscl_pgps))
@@ -660,6 +692,7 @@ void tmem_pgp_delist_free(struct tmem_page_descriptor *pgp)
                list_del_init(&pgp->client_lol_pgps);
        
        spin_unlock(&client_list_lock); 
+       */
        tmem_pgp_free(pgp);
 }
 
@@ -745,8 +778,8 @@ struct tmem_page_descriptor *tmem_pgp_alloc(struct tmem_object_root *obj)
 	}
 
 	//pgp->us.obj = obj;
-	INIT_LIST_HEAD(&pgp->client_rscl_pgps);
-	INIT_LIST_HEAD(&pgp->client_lol_pgps);
+	//INIT_LIST_HEAD(&pgp->client_rscl_pgps);
+	//INIT_LIST_HEAD(&pgp->client_lol_pgps);
 	pgp->tmem_page = NULL;
 
 	if(kvm_tmem_dedup_enabled)

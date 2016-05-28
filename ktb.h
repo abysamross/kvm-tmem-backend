@@ -6,6 +6,7 @@
 #include <linux/rbtree.h> 
 #include <linux/radix-tree.h>
 #include <linux/list.h>
+#include <linux/tmem.h>
 
 #define LOCAL_CLIENT ((uint16_t) - 1)
 #define TMEM_CLIENT 1
@@ -60,8 +61,8 @@ struct tmem_client {
 	/*Each pool corresponds to a fs in a client*/
 	uint16_t client_id;
 	struct tmem_pool *this_client_all_pools[MAX_POOLS_PER_CLIENT];
-        struct list_head remote_sharing_candidate_list;
-        struct list_head local_only_list;
+        //struct list_head remote_sharing_candidate_list;
+        //struct list_head local_only_list;
 	bool allocated;
 	/*refcount: What is this for??*/
 	//atomic_t refcount;
@@ -188,8 +189,8 @@ struct tmem_page_descriptor {
 	struct tmem_page_content_descriptor *pcd; // page dedup 
 	uint32_t pool_id;  // used for invalid list only
 
-        struct list_head client_rscl_pgps;
-        struct list_head client_lol_pgps; 
+        //struct list_head client_rscl_pgps;
+        //struct list_head client_lol_pgps; 
 	/*
 	union 
 	{
@@ -210,7 +211,13 @@ struct tmem_page_descriptor {
 /******************************************************************************/
 /*		 	      End KTB pool object PAGE related data structures*/
 /******************************************************************************/
-
+struct tmem_system_view {
+        struct rb_root pcd_tree_roots[256]; 
+        rwlock_t pcd_tree_rwlocks[256]; 
+        struct list_head remote_sharing_candidate_list;
+        struct list_head local_only_list;
+        spinlock_t system_list_lock;
+};
 /******************************************************************************/
 /*				  KTB pool object PAGE related data structures*/
 /******************************************************************************/
@@ -222,13 +229,17 @@ struct tmem_page_content_descriptor {
 		char *tze; // if !compression_enabled,trailing zeroes eliminated
 	};
 	*/
+        /*this pgp field is just for testing correctness*/
+        struct tmem_page_descriptor *pgp;
 	struct page* system_page;  //page frame pointer
 	struct rb_node pcd_rb_tree_node;
-  	uint32_t index;
+  	//uint32_t index;
 	uint32_t size; 
 	uint32_t pgp_ref_count;
 	/*pcd accounting*/
 	
+        struct list_head system_rscl_pcds;
+        struct list_head system_lol_pcds;
 	//struct list_head pgp_list;
     	//bool eviction_attempted;  // CHANGE TO lifetimes? (settable)
 	
@@ -241,17 +252,19 @@ struct tmem_page_content_descriptor {
 /*		 	     End KTB pool object PAGE  related data structures*/
 /******************************************************************************/
 //extern long long deduped_puts;
-extern struct rb_root pcd_tree_roots[256]; // choose based on first byte of page
-extern rwlock_t pcd_tree_rwlocks[256]; // poor man's concurrency for now
-extern spinlock_t client_list_lock;
+//extern struct rb_root pcd_tree_roots[256]; // choose based on first byte of page
+//extern rwlock_t pcd_tree_rwlocks[256]; // poor man's concurrency for now
+//extern spinlock_t client_list_lock;
+extern struct tmem_system_view tmem_system;
 
 extern struct kmem_cache* tmem_page_descriptors_cachep;
 extern struct kmem_cache* tmem_page_content_desc_cachep;
 extern struct kmem_cache* tmem_objects_cachep;
 extern struct kmem_cache* tmem_object_nodes_cachep;
 
-extern struct local_only_list lol;
-extern struct remote_sharing_candidate_list rscl;
+/*my bloom filter related*/
+extern struct bloom_filter* tmem_system_bloom_filter;
+
 /*tmem pool functions*/
 extern void tmem_new_pool(struct tmem_pool* , uint32_t );
 extern void tmem_flush_pool(struct tmem_pool*, int);
@@ -279,6 +292,7 @@ extern struct tmem_page_descriptor* tmem_pgp_delete_from_obj(\
 		struct tmem_object_root*, uint32_t );  
 
 /*get client's page content functions*/
+extern uint8_t tmem_get_first_byte(struct page*);
 extern int tmem_pcd_copy_to_client(struct page* client_page,\
 		struct tmem_page_descriptor *pgp);                                        
 /*copy from client*/
@@ -290,9 +304,13 @@ extern int tmem_copy_to_client(struct page* client_page, struct page* page);
 extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 
 /*custom radix_tree_destroy function*/
-bool  __radix_tree_delete_node(struct radix_tree_root*, struct radix_tree_node*); 
-void* indirect_to_ptr(void *);
+//bool  __radix_tree_delete_node(struct radix_tree_root*, struct radix_tree_node*); 
+//void* indirect_to_ptr(void *);
 
 /*list functions*/
-extern void make_summary(int);
+extern void update_summary(struct tmem_page_descriptor*);
+
+/*tcp server*/
+extern int network_server_init(void);
+extern void network_server_exit(void);
 #endif /*_KTB_H_*/
