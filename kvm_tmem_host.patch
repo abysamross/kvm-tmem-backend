@@ -1,0 +1,952 @@
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/arch/x86/Kconfig work_area/linux-4.1.3/arch/x86/Kconfig
+--- kernel_source/linux-4.1.3-fresh/arch/x86/Kconfig	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/arch/x86/Kconfig	2016-01-01 23:37:37.997824640 +0530
+@@ -1175,11 +1175,11 @@
+ 	prompt "High Memory Support"
+ 	default HIGHMEM4G
+ 	depends on X86_32
+ 
+ config NOHIGHMEM
+-	bool "off"
++	bool "4GB"
+ 	---help---
+ 	  Linux can use up to 64 Gigabytes of physical memory on x86 systems.
+ 	  However, the address space of 32-bit x86 processors is only 4
+ 	  Gigabytes large. That means that, if you have a large amount of
+ 	  physical memory, not all of it can be "permanently mapped" by the
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/arch/x86/kvm/Kconfig work_area/linux-4.1.3/arch/x86/kvm/Kconfig
+--- kernel_source/linux-4.1.3-fresh/arch/x86/kvm/Kconfig	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/arch/x86/kvm/Kconfig	2015-09-23 14:01:09.236219305 +0530
+@@ -99,6 +99,10 @@
+ # OK, it's a little counter-intuitive to do this, but it puts it neatly under
+ # the virtualization menu.
+ source drivers/vhost/Kconfig
+ source drivers/lguest/Kconfig
+ 
++#ABY MTP
++source drivers/staging/kvm_tmem_backend/Kconfig
++#END ABY MTP
++
+ endif # VIRTUALIZATION
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/arch/x86/kvm/Makefile work_area/linux-4.1.3/arch/x86/kvm/Makefile
+--- kernel_source/linux-4.1.3-fresh/arch/x86/kvm/Makefile	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/arch/x86/kvm/Makefile	2015-09-23 18:48:05.997563463 +0530
+@@ -4,19 +4,25 @@
+ CFLAGS_x86.o := -I.
+ CFLAGS_svm.o := -I.
+ CFLAGS_vmx.o := -I.
+ 
+ KVM := ../../../virt/kvm
++#KVM_TMEM_BKND := ../../../drivers/staging/kvm_tmem_backend
+ 
+ kvm-y			+= $(KVM)/kvm_main.o $(KVM)/coalesced_mmio.o \
+ 				$(KVM)/eventfd.o $(KVM)/irqchip.o $(KVM)/vfio.o
+ kvm-$(CONFIG_KVM_ASYNC_PF)	+= $(KVM)/async_pf.o
+ 
+ kvm-y			+= x86.o mmu.o emulate.o i8259.o irq.o lapic.o \
+ 			   i8254.o ioapic.o irq_comm.o cpuid.o pmu.o
+ kvm-$(CONFIG_KVM_DEVICE_ASSIGNMENT)	+= assigned-dev.o iommu.o
++#ABY MTP
++#KVM(Host) tmem backend directory
++kvm-$(CONFIG_KVM_TMEM_BKND) += ../../../drivers/staging/kvm_tmem_backend/kvm_tmem.o
++#END ABY MTP
+ kvm-intel-y		+= vmx.o
+ kvm-amd-y		+= svm.o
+ 
+ obj-$(CONFIG_KVM)	+= kvm.o
+ obj-$(CONFIG_KVM_INTEL)	+= kvm-intel.o
+ obj-$(CONFIG_KVM_AMD)	+= kvm-amd.o
++
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/arch/x86/kvm/x86.c work_area/linux-4.1.3/arch/x86/kvm/x86.c
+--- kernel_source/linux-4.1.3-fresh/arch/x86/kvm/x86.c	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/arch/x86/kvm/x86.c	2016-01-05 19:18:10.913577929 +0530
+@@ -48,11 +48,13 @@
+ #include <linux/hash.h>
+ #include <linux/pci.h>
+ #include <linux/timekeeper_internal.h>
+ #include <linux/pvclock_gtod.h>
+ #include <trace/events/kvm.h>
+-
++/*ABY MTP*/
++/* #include <linux/tmem.h> */
++/*ABY END MTP*/
+ #define CREATE_TRACE_POINTS
+ #include "trace.h"
+ 
+ #include <asm/debugreg.h>
+ #include <asm/msr.h>
+@@ -5781,11 +5783,13 @@
+ 
+ static struct notifier_block pvclock_gtod_notifier = {
+ 	.notifier_call = pvclock_gtod_notify,
+ };
+ #endif
+-
++/*ABY MTP*/
++extern void kvm_host_tmem_clients_init(void);
++/*END ABY MTP*/
+ int kvm_arch_init(void *opaque)
+ {
+ 	int r;
+ 	struct kvm_x86_ops *ops = opaque;
+ 
+@@ -5828,11 +5832,13 @@
+ 
+ 	perf_register_guest_info_callbacks(&kvm_guest_cbs);
+ 
+ 	if (cpu_has_xsave)
+ 		host_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
+-
++	/*ABY MTP*/
++	kvm_host_tmem_clients_init();
++	/*END ABY MTP*/
+ 	kvm_lapic_init();
+ #ifdef CONFIG_X86_64
+ 	pvclock_gtod_register_notifier(&pvclock_gtod_notifier);
+ #endif
+ 
+@@ -5955,14 +5961,22 @@
+ 
+ 	lapic_irq.delivery_mode = APIC_DM_REMRD;
+ 	kvm_irq_delivery_to_apic(kvm, NULL, &lapic_irq, NULL);
+ }
+ 
++/*ABY MTP*/
++#define KVM_TMEM_HCALL 10
++extern int kvm_host_tmem_handler(struct kvm_vcpu* vcpu, gpa_t, unsigned long* ret); 
++/*END ABY MTP*/
++
+ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
+ {
+ 	unsigned long nr, a0, a1, a2, a3, ret;
+ 	int op_64_bit, r = 1;
++	/*ABY MTP*/
++	/* struct kvm_tmem_op op; */
++	/*END ABY MTP*/
+ 
+ 	kvm_x86_ops->skip_emulated_instruction(vcpu);
+ 
+ 	if (kvm_hv_hypercall_enabled(vcpu->kvm))
+ 		return kvm_hv_hypercall(vcpu);
+@@ -5995,10 +6009,33 @@
+ 		break;
+ 	case KVM_HC_KICK_CPU:
+ 		kvm_pv_kick_cpu_op(vcpu->kvm, a0, a1);
+ 		ret = 0;
+ 		break;
++
++	/*ABY MTP*/
++	case KVM_TMEM_HCALL:
++		
++		/* pr_info("MTP | IN FUNCTION: kvm_emulate_hypercall | INFO: Inside KVM_TMEM_HCALL handler |\n"); */ 
++
++		/* r = kvm_read_guest(vcpu->kvm, a0, &op, sizeof(op)); */
++		
++		/* pr_info("MTP | IN FUNCTION: kvm_emulate_hypercall | INFO: Read  KVM_TMEM_HCALL using kvm_read_guest |\n"); */ 
++		/*
++		if(r < 0){
++			ret = ret - 1000;
++			break;
++		}
++		*/
++		
++		/* r = kvm_host_tmem_op(vcpu, a0, &ret); */
++		// r = kvm_host_tmem_op(/1* vcpu, struct tmem_oid *oid,*/&op, &ret); 
++		/* r = kvm_host_tmem_handler(vcpu, &op, &ret); */
++		r = kvm_host_tmem_handler(vcpu, a0, &ret); 
++		break;
++	/*ABY MTP END*/
++
+ 	default:
+ 		ret = -KVM_ENOSYS;
+ 		break;
+ 	}
+ out:
+@@ -7480,10 +7517,13 @@
+ 	cancel_delayed_work_sync(&kvm->arch.kvmclock_update_work);
+ 	kvm_free_all_assigned_devices(kvm);
+ 	kvm_free_pit(kvm);
+ }
+ 
++/*ABY MTP*/
++extern void kvm_host_tmem_destroy_client(struct kvm* );
++/*END ABY MTP*/
+ void kvm_arch_destroy_vm(struct kvm *kvm)
+ {
+ 	if (current->mm == kvm->mm) {
+ 		/*
+ 		 * Free memory regions allocated on behalf of userspace,
+@@ -7499,10 +7539,13 @@
+ 		kvm_set_memory_region(kvm, &mem);
+ 
+ 		mem.slot = TSS_PRIVATE_MEMSLOT;
+ 		kvm_set_memory_region(kvm, &mem);
+ 	}
++	/*ABY MTP*/
++	kvm_host_tmem_destroy_client(kvm);
++	/*END ABY MTP*/
+ 	kvm_iommu_unmap_guest(kvm);
+ 	kfree(kvm->arch.vpic);
+ 	kfree(kvm->arch.vioapic);
+ 	kvm_free_vcpus(kvm);
+ 	kfree(rcu_dereference_check(kvm->arch.apic_map, 1));
+Binary files kernel_source/linux-4.1.3-fresh/Documentation/kdump/.kdump.txt.swp and work_area/linux-4.1.3/Documentation/kdump/.kdump.txt.swp differ
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/drivers/staging/Kconfig work_area/linux-4.1.3/drivers/staging/Kconfig
+--- kernel_source/linux-4.1.3-fresh/drivers/staging/Kconfig	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/drivers/staging/Kconfig	2015-09-23 17:23:00.308465204 +0530
+@@ -1,8 +1,8 @@
+ menuconfig STAGING
+ 	bool "Staging drivers"
+-	default n
++	default y
+ 	---help---
+ 	  This option allows you to select a number of drivers that are
+ 	  not of the "normal" Linux kernel quality level.  These drivers
+ 	  are placed here in order to get a wider audience to make use of
+ 	  them.  Please note that these drivers are under heavy
+@@ -110,6 +110,10 @@
+ 
+ source "drivers/staging/i2o/Kconfig"
+ 
+ source "drivers/staging/fsl-mc/Kconfig"
+ 
++#ABY MTP#
++#source "drivers/staging/kvm_tmem_backend/Kconfig"
++#END ABY MTP#
++
+ endif # STAGING
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/Kconfig work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/Kconfig
+--- kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/Kconfig	1970-01-01 05:30:00.000000000 +0530
++++ work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/Kconfig	2015-09-23 18:27:02.736957914 +0530
+@@ -0,0 +1,26 @@
++#ABY MTP#
++config KVM_TMEM_BKND
++	tristate "KVM tmem backend"
++	default y
++	---help---
++	  This option is selected by the drivers that 
++	  actually provides KVM host tmem backend support.
++
++menu "KVM tmem backend drivers"
++
++config KVM_TMEM_HOST
++	tristate "KVM host tmem backend support"
++	default y
++	---help---
++	This option enables KVM host transcendant memory 
++	backend to intercept KVM guest operations.
++
++#config KTB_MAIN
++#	tristate "KVM tmem backend main"
++#	default m
++#	---help---
++#	This option provides the actual KVM host tmem 
++#	functionality. 
++
++endmenu
++#END ABY MTP#
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/kvm_tmem.c work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/kvm_tmem.c
+--- kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/kvm_tmem.c	1970-01-01 05:30:00.000000000 +0530
++++ work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/kvm_tmem.c	2016-05-06 22:24:18.042712207 +0530
+@@ -0,0 +1,506 @@
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/types.h>
++#include <linux/kvm_types.h>
++#include <linux/kvm_host.h>
++#include <linux/kvm_para.h>
++#include <linux/tmem.h>
++/*ABY MTP*/
++/* kvm host tmem backend operations to support the guest tmem operations
++ * starts here
++ */
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Aby Sam Ross");
++
++char* kvmtmembknd  = "no";
++char* kvmtmemdedup = "no";
++char* nocleancache = "no";
++
++module_param(kvmtmembknd, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
++MODULE_PARM_DESC(kvmtmembknd, "Parameter to enable kvm_tmem_bknd");
++
++module_param(kvmtmemdedup, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
++MODULE_PARM_DESC(kvmtmemdedup, "Parameter to enable kvm_tmem_dedup");
++
++module_param(nocleancache, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
++MODULE_PARM_DESC(nocleancache, "Parameter to disable cleancache");
++
++int kvm_tmem_bknd_enabled __read_mostly;
++EXPORT_SYMBOL(kvm_tmem_bknd_enabled);
++
++int kvm_tmem_dedup_enabled __read_mostly;
++EXPORT_SYMBOL(kvm_tmem_dedup_enabled);
++
++int use_cleancache = 1;
++EXPORT_SYMBOL(use_cleancache);
++
++/*Ultimately have to resort to this*/
++DEFINE_RWLOCK(kvm_host_tmem_rwlock);
++
++static struct kvm_host_tmem_ops kvm_host_tmem_ops; 		
++static int kvm_host_tmem_clients_enabled;
++
++void kvm_host_tmem_register_ops(struct kvm_host_tmem_ops *ops)
++{
++	kvm_host_tmem_ops = *ops;
++}
++EXPORT_SYMBOL(kvm_host_tmem_register_ops);
++
++void kvm_host_tmem_deregister_ops(void)
++{
++	kvm_host_tmem_ops.kvm_host_new_pool = NULL;
++	kvm_host_tmem_ops.kvm_host_destroy_pool = NULL;
++	kvm_host_tmem_ops.kvm_host_put_page = NULL;
++	kvm_host_tmem_ops.kvm_host_get_page = NULL;
++	kvm_host_tmem_ops.kvm_host_flush_page = NULL;
++	kvm_host_tmem_ops.kvm_host_flush_object = NULL;
++	kvm_host_tmem_ops.kvm_host_create_client = NULL;
++	kvm_host_tmem_ops.kvm_host_destroy_client = NULL;
++}
++EXPORT_SYMBOL(kvm_host_tmem_deregister_ops);
++/* To keep track of VM's, their mm_struct(s)
++ * so as to obtain an unique client id.
++ */
++
++struct kvm_host_tmem_clients {
++	int current_count;
++	struct mm_struct *guest_mm[MAX_VMS];
++};
++
++static struct kvm_host_tmem_clients *kvm_host_tmem_clients;
++
++void kvm_host_tmem_clients_init(void) 
++{
++	kvm_host_tmem_clients = kmalloc(sizeof(struct kvm_host_tmem_clients),\
++                                                GFP_KERNEL);
++
++	if(!kvm_host_tmem_clients)
++	{
++		pr_info(" *** mtp | Clients cannot be allocated: Out of memory!!" 
++			" | kvm_host_tmem_clients_init *** \n");
++		kvm_host_tmem_clients_enabled = 0;
++	}
++	else
++	{
++		memset(kvm_host_tmem_clients,0,\
++                                sizeof(struct kvm_host_tmem_clients));
++		kvm_host_tmem_clients_enabled = 1;
++	}
++	return;
++}
++EXPORT_SYMBOL(kvm_host_tmem_clients_init);
++
++static int kvm_host_tmem_new_client(struct kvm *kvm, int *client_id)
++{
++	int id;
++        
++        write_lock(&kvm_host_tmem_rwlock);
++
++	if(unlikely(kvm_host_tmem_clients->current_count >= MAX_VMS))
++	{
++		pr_info(" *** mtp | More than 16 VMs running!! | "
++			"kvm_host_tmem_new_client *** \n");
++
++                goto out;
++	}
++
++	for(id=0; id<MAX_VMS; ++id)
++	{
++		if(kvm_host_tmem_clients->guest_mm[id] == NULL)
++			break;
++	}
++
++	if(unlikely(id == MAX_VMS))
++                goto out;
++
++        if(kvm_host_tmem_ops.kvm_host_create_client != NULL)
++        {
++                if(kvm_host_tmem_ops.kvm_host_create_client(id) < 0)  
++                        goto out;
++                else
++                {
++                        kvm_host_tmem_clients->guest_mm[id] = kvm->mm;
++                        ++kvm_host_tmem_clients->current_count;
++                        *client_id = id;
++                        write_unlock(&kvm_host_tmem_rwlock);
++                        return 0;
++                }
++
++        }
++
++
++out:
++        write_unlock(&kvm_host_tmem_rwlock);
++        return -EINVAL;
++}
++
++static int kvm_host_tmem_find_client_id (struct kvm *kvm, int *client_id)
++{
++	int id;
++
++	for(id = 0;\
++        id < MAX_VMS && (kvm->mm != kvm_host_tmem_clients->guest_mm[id]); ++id);
++	if(unlikely(id == MAX_VMS))
++		return -EINVAL;
++	BUG_ON(kvm->mm != kvm_host_tmem_clients->guest_mm[id]);
++	*client_id = id;
++	return 0;
++}
++
++void  kvm_host_tmem_destroy_client(struct kvm *kvm)
++{
++	int client_id;
++	int ret = -1;
++	
++        write_lock(&kvm_host_tmem_rwlock);
++
++	if (kvm_host_tmem_find_client_id(kvm, &client_id))
++	{
++                write_unlock(&kvm_host_tmem_rwlock);
++		return;
++	}
++
++
++	if (kvm_host_tmem_ops.kvm_host_destroy_client != NULL)
++	{
++		ret = kvm_host_tmem_ops.kvm_host_destroy_client(client_id);
++	}
++	
++	kvm_host_tmem_clients->guest_mm[client_id] = NULL;
++	kvm_host_tmem_clients->current_count--;
++	pr_info(" *** mtp | kvm_host_tmem_client: %d destroyed %s | "
++		"kvm_host_tmem_handler *** \n", 
++                client_id, (ret>=0)?"successfully":"forcefully");
++
++        write_unlock(&kvm_host_tmem_rwlock);
++
++}
++EXPORT_SYMBOL(kvm_host_tmem_destroy_client);
++
++//int kvm_host_tmem_op (struct kvm_vcpu *vcpu, gpa_t addr, unsigned long *ret)
++//int kvm_host_tmem_op (/*struct kvm_vcpu *vcpu, struct tmem_oid *oid,*/
++//struct kvm_tmem_op *op, unsigned long *ret)
++
++int kvm_host_tmem_handler(struct kvm_vcpu *vcpu, gpa_t addr, unsigned long *ret)
++{
++	/* struct kvm_tmem_op op = *kvm_tmem_op; */
++	struct kvm_tmem_op op;
++	//uint64_t pfn;
++	struct page *page;
++	struct tmem_oid oid;
++	int client_id;
++	int r;
++
++	if(!kvm_host_tmem_clients_enabled)
++	{
++		pr_info(" *** mtp | No kvm_host_tmem_clients have been enabled "
++                        "so far | kvm_host_tmem_handler *** \n");
++		*ret = -1;
++		return -EINVAL;
++	}
++
++	r = kvm_read_guest(vcpu->kvm, addr, &op, sizeof(op));
++	if (r < 0)
++		return r;
++
++	/* Check if this is a new VM asking for a NEW_POOL or a VM which
++	 * came up after the tmem host backend was inserted and is a
++	 * valid client asking for a valid operation.
++	 * ++ The module can be inserted after a VM is already up and for
++	 * this VM, the just inserted tmem host backend module is not applicable.
++	 * But I don't think ++ is captured here, ++ should be captured within
++	 * the backend module when the VM is trying to access something other 
++	 * than NEW_POOL 
++	 */  
++	
++	if(kvm_host_tmem_find_client_id(vcpu->kvm, &client_id) < 0)
++	{
++
++		if(op.cmd != TMEM_NEW_POOL)
++		{
++			pr_info(" *** mtp | First time client doing something "
++                                "other than TMEM_NEW_POOL | "
++                                "kvm_host_tmem_handler *** \n");
++
++			*ret = -1;
++			return -EINVAL;
++		}
++
++		if(kvm_host_tmem_new_client(vcpu->kvm, &client_id) < 0)
++		{	
++			pr_info(" *** mtp | New kvm_host_tmem_client creation "
++                                "failed | kvm_host_tmem_handler *** \n");
++			*ret = -1;
++			return -EINVAL;
++		}
++		
++		pr_info(" *** mtp | New kvm_host_tmem_client: %d created "
++                        "successfully | kvm_host_tmem_handler *** \n", 
++                        client_id);
++	}
++
++
++	switch (op.cmd) {
++
++		case TMEM_NEW_POOL:
++ 
++	                //pr_info(" *** IN KERNEL | CURRENT ******** pid: %d, "
++                        //        "name: %s ******** INSERTED | IN KERNEL *** \n",
++                        //        current->pid, current->comm); 
++                        
++                        write_lock(&kvm_host_tmem_rwlock);
++
++		        //pr_info(" *** mtp | TMEM_NEW_POOL, RESPONSE TO: "
++                        //        "tmem_init_fs | kvm_host_tmem_handler *** \n");
++
++			if(kvm_host_tmem_ops.kvm_host_new_pool != NULL)
++			{
++				*ret = 
++				(*kvm_host_tmem_ops.kvm_host_new_pool)\
++                                                (client_id, op.u.new.uuid[0],\
++                                                 op.u.new.uuid[1],op.u.new.flags);
++			}
++			else
++			{
++			        //pr_info(" *** mtp | No definiton for "
++                                //        "TMEM_NEW_POOL | "
++				//	  "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}	
++                        
++                        write_unlock(&kvm_host_tmem_rwlock);
++
++		    break;
++
++		case TMEM_DESTROY_POOL:
++
++                        write_lock(&kvm_host_tmem_rwlock);
++
++			//pr_info(" *** mtp | TMEM_DESTROY_POOL, RESPONSE TO: "
++                        //        "tmem_flush_fs | kvm_host_tmem_handler *** \n");
++
++			if(kvm_host_tmem_ops.kvm_host_destroy_pool != NULL)
++			{
++				*ret = (*kvm_host_tmem_ops.kvm_host_destroy_pool)\
++					   (client_id, op.pool_id);
++			}
++			else
++			{
++				//pr_info(" *** mtp | No definition for "
++                                //        "TMEM_DESTROY_POOL | "
++				//	  "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}
++			
++                        write_unlock(&kvm_host_tmem_rwlock);
++
++		   	break;
++
++		case TMEM_NEW_PAGE:
++			//pr_info("MTP | CALL: kvm_host_tmem_op | "
++                        //        "RESPONSE TO: tmem_new_page\n");
++		   	break;
++			
++		case TMEM_PUT_PAGE:
++			/*
++			pr_info(" *** mtp | TMEM_PUT_PAGE, RESPONSE TO: "
++                                "tmem_put_page | kvm_host_tmem_handler *** \n"); 
++			*/	
++                        read_lock(&kvm_host_tmem_rwlock);
++
++			if(kvm_host_tmem_ops.kvm_host_put_page != NULL) 
++			{
++				//pfn = gfn_to_pfn(vcpu->kvm, op.u.gen.gfn);
++				//page = pfn_to_page(pfn);
++                                page = gfn_to_page(vcpu->kvm, op.u.gen.gfn);
++                                if(is_error_page(page))
++                                {
++                                        kvm_release_page_clean(page);
++                                        return -EINVAL;
++                                }
++
++				oid.oid[0] = op.u.gen.oid[0];	
++				oid.oid[1] = op.u.gen.oid[1];	
++				oid.oid[2] = op.u.gen.oid[2];	
++				VM_BUG_ON(!PageLocked(page));			
++			 	*ret = 
++				(*kvm_host_tmem_ops.kvm_host_put_page)\
++				        (client_id, op.pool_id, &oid,\
++                                         op.u.gen.index, page);
++
++                                kvm_release_page_clean(page);
++				//pr_info(" *** mtp | tmem_put_page returned | "
++				//		"kvm_host_tmem_handler *** \n"); 
++			}
++			else
++			{
++				//pr_info(" *** mtp | No definition for "
++                                //        "TMEM_PUT_PAGE | "
++                                //        "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}
++
++                        read_unlock(&kvm_host_tmem_rwlock);
++
++			break;
++
++		case TMEM_GET_PAGE:
++			//pr_info("MTP | CALL: kvm_host_tmem_op | RESPONSE TO: "
++                        //        "tmem_get_page\n");
++                        
++                        read_lock(&kvm_host_tmem_rwlock);
++
++			if(kvm_host_tmem_ops.kvm_host_get_page != NULL)
++			{
++				//pfn = gfn_to_pfn(vcpu->kvm, op.u.gen.gfn);
++				//page = pfn_to_page(pfn);
++                                page = gfn_to_page(vcpu->kvm, op.u.gen.gfn);
++                                if(is_error_page(page))
++                                {
++                                        kvm_release_page_clean(page);
++                                        return -EINVAL;
++                                }
++
++				oid.oid[0] = op.u.gen.oid[0];	
++				oid.oid[1] = op.u.gen.oid[1];	
++				oid.oid[2] = op.u.gen.oid[2];	
++				VM_BUG_ON(!PageLocked(page));			
++
++			 	*ret = 
++				(*kvm_host_tmem_ops.kvm_host_get_page)\
++                                                (client_id, op.pool_id,\
++						&oid, op.u.gen.index, page);
++
++                                kvm_release_page_clean(page);
++				//*ret = -1;
++				//pr_info(" *** mtp | tmem_get_page returned | "
++				//	  "kvm_host_tmem_handler *** \n"); 
++			}
++			else
++			{
++				//pr_info(" *** mtp | No definition for "
++				//	  "TMEM_GET_PAGE | "
++                                //	  "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}
++
++                        read_unlock(&kvm_host_tmem_rwlock);
++
++		    break;
++
++		case TMEM_FLUSH_PAGE:
++			/* pr_info("MTP | CALL: kvm_host_tmem_op | RESPONSE TO:"
++                         *         " tmem_flush_page\n"); */
++
++                        read_lock(&kvm_host_tmem_rwlock);
++
++			if(kvm_host_tmem_ops.kvm_host_flush_page != NULL)
++			{
++				oid.oid[0] = op.u.gen.oid[0];	
++				oid.oid[1] = op.u.gen.oid[1];	
++				oid.oid[2] = op.u.gen.oid[2];	
++
++			 	*ret = 
++				(*kvm_host_tmem_ops.kvm_host_flush_page)\
++                                                (client_id, op.pool_id,\
++						        &oid, op.u.gen.index);
++
++				//*ret = -1;
++				//pr_info(" *** mtp | tmem_flush_page returned |"
++				//	  " kvm_host_tmem_handler *** \n"); 
++			}
++			else
++			{
++				//pr_info(" *** mtp | No definition for "
++                                //        "TMEM_FLUSH_PAGE | "
++                                //        "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}
++
++                        read_unlock(&kvm_host_tmem_rwlock);
++
++		    break;
++
++		case TMEM_FLUSH_OBJECT:
++			/* pr_info("MTP | CALL: kvm_host_tmem_op | "
++			 * " RESPONSE TO: tmem_flush_inode\n"); */
++                    
++                        read_lock(&kvm_host_tmem_rwlock);
++
++			if(kvm_host_tmem_ops.kvm_host_flush_object != NULL)
++			{
++				oid.oid[0] = op.u.gen.oid[0];	
++				oid.oid[1] = op.u.gen.oid[1];	
++				oid.oid[2] = op.u.gen.oid[2];	
++
++			 	*ret = 
++				(*kvm_host_tmem_ops.kvm_host_flush_object)\
++                                                        (client_id, op.pool_id,\
++						                &oid);
++
++				//*ret = -1;
++				//pr_info(" *** mtp | tmem_flush_object "
++                                //        "returned | "
++				//	  "kvm_host_tmem_handler *** \n"); 
++			}
++			else
++			{
++				//pr_info(" *** mtp | No definition for "
++                                //        "TMEM_FLUSH_OBJECT | "
++				//	  "kvm_host_tmem_handler *** \n");
++
++				*ret = -1;
++			}
++
++                        read_unlock(&kvm_host_tmem_rwlock);
++
++		    break;
++
++		default:
++
++			//pr_info(" *** mtp | default case | "
++                        //        "kvm_host_tmem_handler *** \n");
++			*ret = -1;
++	}
++	return 0;
++}
++EXPORT_SYMBOL(kvm_host_tmem_handler);
++
++static int __init kvm_host_tmem_bknd_init(void)
++{
++	/*Check if kvm tmem backend enabled*/
++	if(strcmp(kvmtmembknd,"yes") == 0)
++		kvm_tmem_bknd_enabled = 1;
++	else if(strcmp(kvmtmembknd,"no") == 0)
++		kvm_tmem_bknd_enabled = 0;
++	
++	/*Check if kvm tmem de-duplication enabled*/
++	if(strcmp(kvmtmemdedup,"yes") == 0)
++		kvm_tmem_dedup_enabled = 1;
++	else if(strcmp(kvmtmemdedup,"no") == 0)
++		kvm_tmem_dedup_enabled = 0;
++
++	/*Check if cleancache enabled*/
++	if(strcmp(nocleancache,"no") == 0)
++		use_cleancache = 1;
++		
++	return 0;
++}
++
++void __exit kvm_host_tmem_bknd_exit(void)
++{
++	kvmtmembknd = "no";
++	kvm_tmem_bknd_enabled = 0;
++	
++}
++
++module_init(kvm_host_tmem_bknd_init);
++module_exit(kvm_host_tmem_bknd_exit);
++
++/*END ABY MTP*/
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/Makefile work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/Makefile
+--- kernel_source/linux-4.1.3-fresh/drivers/staging/kvm_tmem_backend/Makefile	1970-01-01 05:30:00.000000000 +0530
++++ work_area/linux-4.1.3/drivers/staging/kvm_tmem_backend/Makefile	2015-09-23 13:59:05.840216799 +0530
+@@ -0,0 +1,4 @@
++#ABY MTP#
++obj-$(CONFIG_KVM_TMEM_HOST) += kvm_tmem.o 
++#obj-$(CONFIG_KTB_MAIN) += ktb_main.o
++#END ABY MTP#
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/drivers/staging/Makefile work_area/linux-4.1.3/drivers/staging/Makefile
+--- kernel_source/linux-4.1.3-fresh/drivers/staging/Makefile	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/drivers/staging/Makefile	2015-09-23 17:22:50.452465004 +0530
+@@ -46,5 +46,10 @@
+ obj-$(CONFIG_UNISYSSPAR)	+= unisys/
+ obj-$(CONFIG_COMMON_CLK_XLNX_CLKWZRD)	+= clocking-wizard/
+ obj-$(CONFIG_FB_TFT)		+= fbtft/
+ obj-$(CONFIG_I2O)		+= i2o/
+ obj-$(CONFIG_FSL_MC_BUS)	+= fsl-mc/
++
++#ABY MTP
++# Kvm(host) tmem backend directory
++#obj-$(CONFIG_KVM_TMEM_BKND)	+= kvm_tmem_backend/
++#END ABY MTP
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/include/linux/tmem.h work_area/linux-4.1.3/include/linux/tmem.h
+--- kernel_source/linux-4.1.3-fresh/include/linux/tmem.h	1970-01-01 05:30:00.000000000 +0530
++++ work_area/linux-4.1.3/include/linux/tmem.h	2016-05-06 20:56:54.231926606 +0530
+@@ -0,0 +1,152 @@
++#ifndef __TMEM_H_ 
++#define __TMEM_H_
++
++//#include <linux/rbtree.h> 
++//#include <linux/radix-tree.h> 
++
++#define TMEM_CONTROL               0
++#define TMEM_NEW_POOL              1
++#define TMEM_DESTROY_POOL          2
++#define TMEM_NEW_PAGE              3
++#define TMEM_PUT_PAGE              4
++#define TMEM_GET_PAGE              5
++#define TMEM_FLUSH_PAGE            6
++#define TMEM_FLUSH_OBJECT          7
++#define TMEM_READ                  8
++#define TMEM_WRITE                 9
++#define TMEM_XCHG                 10
++
++/* Bits for HYPERVISOR_tmem_op(TMEM_NEW_POOL) */
++#define TMEM_POOL_PERSIST          1
++#define TMEM_POOL_SHARED           2
++#define TMEM_POOL_PAGESIZE_SHIFT   4
++#define TMEM_POOL_PAGESIZE_MASK   0xf
++#define TMEM_POOL_VERSION_SHIFT   24
++#define TMEM_POOL_VERSION_MASK  0xff
++#define TMEM_VERSION_SHIFT        24
++
++
++/* flags for tmem_ops.new_pool */
++#define TMEM_POOL_PERSIST          1
++#define TMEM_POOL_SHARED           2
++#define KVM_TMEM_HCALL		  10
++
++#define MAX_VMS			  16
++
++struct kvm_tmem_op {
++        uint32_t cmd;
++        int32_t pool_id;
++        union {
++                struct {  /* for cmd == TMEM_NEW_POOL */
++                        uint64_t uuid[2];
++                        uint32_t flags;
++			uint16_t cli_id;
++                } new;
++                struct {
++                        uint64_t oid[3];
++                        uint32_t index;
++                        uint32_t tmem_offset;
++                        uint32_t pfn_offset;
++                        uint32_t len;
++                        unsigned long gfn; /* guest machine page frame */
++			uint16_t cli_id;
++                } gen;
++        } u;
++};
++
++/*ABY MTP*/
++
++/*********************************************/
++/*Declaration of tmem data structures and api*/ 
++/*********************************************/
++#define LOCAL_CLIENT ((uint16_t) - 1)
++#define TMEM_POOL_PRIVATE_UUID	{ 0, 0 }
++#define OBJ_HASH_BUCKETS 256
++//struct rb_root;
++
++struct tmem_pool_uuid {
++	u64 uuid_lo;
++	u64 uuid_hi;
++};
++
++struct tmem_oid {
++	u64 oid[3];
++};
++
++/*
++struct tmem_pool {
++
++    //bool shared;
++    //bool persistent;
++    bool is_dying;
++    void  *associated_client;
++    uint64_t uuid[2]; //0 for private, non-zero for shared 
++    uint32_t pool_id;
++    rwlock_t pool_rwlock;
++    atomic_t refcount;
++    struct rb_root obj_rb_root[OBJ_HASH_BUCKETS]; // protected by pool_rwlock
++    long obj_count;  // atomicity depends on pool_rwlock held for write
++    unsigned long objnode_count, objnode_count_max;
++    //struct list_head persistent_page_list;
++    long obj_count_max;  
++    struct tmem_page_descriptor *cur_pgp;
++
++};
++
++struct tmem_object_root {
++    struct tmem_oid oid;
++    struct rb_node rb_tree_node; //protected by pool->pool_rwlock
++    unsigned long objnode_count; //atomicity depends on obj_spinlock
++    long pgp_count; //atomicity depends on obj_spinlock
++    struct radix_tree_root tree_root; //tree of pages within object
++    struct tmem_pool* pool;
++    uint16_t last_client;
++    spinlock_t obj_spinlock;
++};
++
++extern void tmem_new_pool(struct tmem_pool* , uint32_t );
++extern int tmem_destroy_pool(struct tmem_pool*);
++*/
++
++
++/************************************************/
++/*Declaration of kvm host tmem backend functions*/
++/************************************************/
++
++/*Function that handles/parses the guest tmem op requests in kvm host*/
++//int kvm_host_tmem_op(/*struct kvm_vcpu *vcpu, struct tmem_oid *oid, */struct kvm_tmem_op *op, unsigned long *ret);
++//#define KVM_TMEM_NO_POOL -1
++//#define KVM_TMEM_NO_BACKEND -2
++
++extern int use_cleancache;
++extern int kvm_tmem_bknd_enabled;
++extern int kvm_tmem_dedup_enabled;
++
++struct kvm_host_tmem_ops {
++	unsigned long (*kvm_host_new_pool)(int, uint64_t, uint64_t, uint32_t);
++	unsigned long (*kvm_host_destroy_pool)(int, uint32_t);
++	unsigned long (*kvm_host_put_page)(int, int32_t, struct tmem_oid* , uint32_t, struct page*);
++	unsigned long (*kvm_host_get_page)(int, int32_t, struct tmem_oid* , uint32_t, struct page*);
++	unsigned long (*kvm_host_flush_page)(int, int32_t, struct tmem_oid* , uint32_t);
++	unsigned long (*kvm_host_flush_object)(int, int32_t, struct tmem_oid*);
++        int (*kvm_host_create_client)(int);
++	int (*kvm_host_destroy_client)(int);
++};
++
++extern void kvm_host_tmem_register_ops(struct kvm_host_tmem_ops *ops);
++extern void kvm_host_tmem_deregister_ops(void);
++/* extern int kvm_host_tmem_handler(struct kvm_vcpu* vcpu, struct kvm_tmem_op* op, unsigned long* ret); */
++extern int kvm_host_tmem_handler(struct kvm_vcpu* vcpu, gpa_t, unsigned long* ret); 
++
++/*Declaration of stubs to functions that service guest tmem ops in kvm host.*/
++
++/*
++ * extern void kvm_host_serv_new_page_request
++ * extern void kvm_host_serv_put_page_request
++ * extern void kvm_host_serv_get_page_request
++ * extern void kvm_host_serv_flush_page_request
++ * extern void kvm_host_serv_flush_object_request
++ */
++/*END ABY MTP*/
++
++#endif
+Binary files kernel_source/linux-4.1.3-fresh/net/.socket.c.swo and work_area/linux-4.1.3/net/.socket.c.swo differ
+diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/virt/kvm/kvm_main.c work_area/linux-4.1.3/virt/kvm/kvm_main.c
+--- kernel_source/linux-4.1.3-fresh/virt/kvm/kvm_main.c	2015-07-21 22:40:33.000000000 +0530
++++ work_area/linux-4.1.3/virt/kvm/kvm_main.c	2015-09-20 01:58:27.418134597 +0530
+@@ -1533,11 +1533,11 @@
+ int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
+ 			int len)
+ {
+ 	int r;
+ 	unsigned long addr;
+-
++	
+ 	addr = gfn_to_hva_prot(kvm, gfn, NULL);
+ 	if (kvm_is_error_hva(addr))
+ 		return -EFAULT;
+ 	r = __copy_from_user(data, (void __user *)addr + offset, len);
+ 	if (r)

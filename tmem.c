@@ -351,14 +351,18 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                 /* I don't have a reference to a pgp here. This means that */
                 /* I have to do remote dedup also based on pcds. */
                 /* i.e. the summaries should hold pcds. */
-                        spin_lock(&(tmem_system.system_list_lock));
+                        //spin_lock(&(tmem_system.system_list_lock));
+                        write_lock(&(tmem_system.system_list_rwlock));
+
                         if(!list_empty(&pcd->system_rscl_pcds))
                         {
                                 list_del_init(&pcd->system_rscl_pcds); 
                                 list_add_tail(&pcd->system_lol_pcds,\
-                                                &(tmem_system.local_only_list));
+                                              &(tmem_system.local_only_list));
                         }
-                        spin_unlock(&(tmem_system.system_list_lock));
+
+                        write_unlock(&(tmem_system.system_list_rwlock));
+                        //spin_unlock(&(tmem_system.system_list_lock));
 
                         tmem_free_page(pgp->tmem_page);
 			goto match;
@@ -490,12 +494,16 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         //Also this pcd can be either in remote_sharing_candidate_list or
         //local_only_list
 
-        spin_lock(&(tmem_system.system_list_lock)); 
+        //spin_lock(&(tmem_system.system_list_lock)); 
+        write_lock(&(tmem_system.system_list_rwlock));
+
         if(!list_empty(&pcd->system_rscl_pcds))
                 list_del_init(&pcd->system_rscl_pcds);
         else if(!list_empty(&pcd->system_lol_pcds))
                 list_del_init(&pcd->system_lol_pcds);
-        spin_unlock(&(tmem_system.system_list_lock)); 
+
+        write_unlock(&(tmem_system.system_list_rwlock));
+        //spin_unlock(&(tmem_system.system_list_lock)); 
 
         pcd->pgp = NULL;
 	pcd->system_page = NULL;

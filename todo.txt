@@ -1,0 +1,9 @@
+1. The bloom filter mutex will not go along with spinlock of the lists.
+Most probably will have to change them to spinlocks. This is applicable only for
+tmem_backend.
+EDIT: It seems this won't be required as before accessing the bloom filters all
+the spinlocks are unlocked.
+
+2. Test the leader_server_client and local_server_client separately, as the
+protocol was changed to send the size of bloom filter in bits to other RS from
+the leader_server.

@@ -46,7 +46,7 @@ struct bloom_filter *bloom_filter_new(int bit_size)
 
 	//filter = kzalloc(sizeof(*filter) + bitmap_size, GFP_KERNEL);
 	filter = vmalloc(sizeof(*filter) + bitmap_size);
-        memset(filter, 0, sizeof(filter) + bitmap_size);
+        memset(filter, 0, sizeof(*filter) + bitmap_size);
 
 	if (!filter)
 		return ERR_PTR(-ENOMEM);

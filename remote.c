@@ -25,7 +25,9 @@ void update_summary(struct tmem_page_descriptor* pgp)
 
         if(can_show(update_summary))
         {
-                spin_lock(&(tmem_system.system_list_lock));
+                //spin_lock(&(tmem_system.system_list_lock));
+                read_lock(&(tmem_system.system_list_rwlock));
+
                 if(!list_empty(&(tmem_system.remote_sharing_candidate_list)))
                 {
                         list_for_each_entry(pcd,\
@@ -66,10 +68,13 @@ void update_summary(struct tmem_page_descriptor* pgp)
                                 "***\n", count2);
                 }
                 pr_info("__________________________________________________\n");
-                spin_unlock(&(tmem_system.system_list_lock));
+
+                read_unlock(&(tmem_system.system_list_rwlock));
+                //spin_unlock(&(tmem_system.system_list_lock));
         }
         
         pcd = pgp->pcd;
+
         if(can_show(update_summary))
                 pr_info(" *** mtp | rscl object: "
                         "%llu %llu %llu, index: %u | "
@@ -78,8 +83,15 @@ void update_summary(struct tmem_page_descriptor* pgp)
                         pcd->pgp->obj->oid.oid[1],
                         pcd->pgp->obj->oid.oid[0], 
                         pcd->pgp->index);
+
         byte = tmem_get_first_byte(pcd->system_page);
         
+        /* 
+         * now the bloom filter should be under lock, as I don't want the network
+         * server trying to transfer it while I am accessing it.
+         * The bloom filter implementation already has a mutex that locks it
+         * while accessing it for add and other operations.
+         */
         if(bloom_filter_add(tmem_system_bloom_filter, &byte, 1))
                 pr_info(" *** mtp | adding rscl object to bloom filter failed "
                         "| update_summary *** \n");

@@ -22,18 +22,23 @@ __attribute__((section("__versions"))) = {
 	{ 0x3356b90b, __VMLINUX_SYMBOL_STR(cpu_tss) },
 	{ 0x8130d5db, __VMLINUX_SYMBOL_STR(kmalloc_caches) },
 	{ 0xd2b09ce5, __VMLINUX_SYMBOL_STR(__kmalloc) },
+	{ 0xf9a482f9, __VMLINUX_SYMBOL_STR(msleep) },
 	{ 0xeffd4733, __VMLINUX_SYMBOL_STR(kernel_sendmsg) },
 	{ 0xda3e43d1, __VMLINUX_SYMBOL_STR(_raw_spin_unlock) },
 	{ 0x487ff0fe, __VMLINUX_SYMBOL_STR(debugfs_create_dir) },
 	{ 0xd6ee688f, __VMLINUX_SYMBOL_STR(vmalloc) },
+	{ 0x754d539c, __VMLINUX_SYMBOL_STR(strlen) },
 	{ 0xb5dcab5b, __VMLINUX_SYMBOL_STR(remove_wait_queue) },
 	{ 0x2103d28a, __VMLINUX_SYMBOL_STR(sock_release) },
 	{ 0x8b900f3b, __VMLINUX_SYMBOL_STR(_raw_read_lock) },
 	{ 0x65415e82, __VMLINUX_SYMBOL_STR(mutex_unlock) },
+	{ 0x85df9b6c, __VMLINUX_SYMBOL_STR(strsep) },
 	{ 0x999e8297, __VMLINUX_SYMBOL_STR(vfree) },
 	{ 0x4629334c, __VMLINUX_SYMBOL_STR(__preempt_count) },
+	{ 0x91715312, __VMLINUX_SYMBOL_STR(sprintf) },
 	{ 0x9e88343e, __VMLINUX_SYMBOL_STR(debugfs_remove_recursive) },
 	{ 0xcad68c05, __VMLINUX_SYMBOL_STR(kthread_create_on_node) },
+	{ 0xe2d5255a, __VMLINUX_SYMBOL_STR(strcmp) },
 	{ 0xece784c2, __VMLINUX_SYMBOL_STR(rb_first) },
 	{ 0x47d1e2f8, __VMLINUX_SYMBOL_STR(kvm_tmem_bknd_enabled) },
 	{ 0xffd5a395, __VMLINUX_SYMBOL_STR(default_wake_function) },
@@ -54,12 +59,14 @@ __attribute__((section("__versions"))) = {
 	{ 0x668ae44f, __VMLINUX_SYMBOL_STR(mutex_lock) },
 	{ 0x143687b2, __VMLINUX_SYMBOL_STR(_raw_write_lock) },
 	{ 0xf07a7048, __VMLINUX_SYMBOL_STR(kvm_host_tmem_deregister_ops) },
+	{ 0x2276db98, __VMLINUX_SYMBOL_STR(kstrtoint) },
 	{ 0x7fbd10d2, __VMLINUX_SYMBOL_STR(radix_tree_next_chunk) },
 	{ 0x952664c5, __VMLINUX_SYMBOL_STR(do_exit) },
 	{ 0xe50e115f, __VMLINUX_SYMBOL_STR(kvm_host_tmem_register_ops) },
 	{ 0x3c483012, __VMLINUX_SYMBOL_STR(radix_tree_delete) },
 	{ 0x65535802, __VMLINUX_SYMBOL_STR(kmem_cache_alloc) },
 	{ 0x31e0353a, __VMLINUX_SYMBOL_STR(__free_pages) },
+	{ 0xc956ecfc, __VMLINUX_SYMBOL_STR(kernel_sendpage) },
 	{ 0xd62c833f, __VMLINUX_SYMBOL_STR(schedule_timeout) },
 	{ 0x904bf21f, __VMLINUX_SYMBOL_STR(crypto_destroy_tfm) },
 	{ 0x69d08d67, __VMLINUX_SYMBOL_STR(wake_up_process) },
@@ -74,14 +81,18 @@ __attribute__((section("__versions"))) = {
 	{ 0x5860aad4, __VMLINUX_SYMBOL_STR(add_wait_queue) },
 	{ 0xb6244511, __VMLINUX_SYMBOL_STR(sg_init_one) },
 	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
+	{ 0x69ad2f20, __VMLINUX_SYMBOL_STR(kstrtouint) },
 	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
 	{ 0x6df1aaf1, __VMLINUX_SYMBOL_STR(kernel_sigaction) },
 	{ 0xb4d65e51, __VMLINUX_SYMBOL_STR(sock_create) },
+	{ 0x510b49e8, __VMLINUX_SYMBOL_STR(__put_task_struct) },
 	{ 0xfa66f77c, __VMLINUX_SYMBOL_STR(finish_wait) },
 	{ 0x844e3767, __VMLINUX_SYMBOL_STR(radix_tree_lookup) },
 	{ 0xca9360b5, __VMLINUX_SYMBOL_STR(rb_next) },
+	{ 0x28318305, __VMLINUX_SYMBOL_STR(snprintf) },
 	{ 0xc3754cb1, __VMLINUX_SYMBOL_STR(crypto_alloc_base) },
 	{ 0x614bb773, __VMLINUX_SYMBOL_STR(radix_tree_insert) },
+	{ 0xe914e41e, __VMLINUX_SYMBOL_STR(strcpy) },
 };
 
 static const char __module_depends[]
@@ -90,4 +101,4 @@ __attribute__((section(".modinfo"))) =
 "depends=kvm";
 
 
-MODULE_INFO(srcversion, "5352A30F77711A3BB14AA34");
+MODULE_INFO(srcversion, "3FD5B0F8DD6676384560B76");

@@ -10,7 +10,11 @@
 #include <linux/debugfs.h>
 //#include <linux/spinlock.h>
 #include "bloom_filter.h"
+#include <linux/delay.h>
+#include <linux/timer.h>
+#include <linux/kthread.h>
 #include "ktb.h"
+#include "network_tcp.h"
 
 #define mtp_debug 0
 #define mtp_debug_spl 0
@@ -18,19 +22,21 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aby Sam Ross");
 
 //static struct tmem_client ktb_host;
-static struct tmem_client *ktb_all_clients[MAX_CLIENTS];
+//static int delay = 300;
+int bflt_bit_size = 268435456;
 
+struct tmem_system_view tmem_system;
+struct task_struct *fwd_bflt_thread = NULL;
+static struct tmem_client *ktb_all_clients[MAX_CLIENTS];
+struct bloom_filter* tmem_system_bloom_filter;
 struct kmem_cache* tmem_page_descriptors_cachep;
 struct kmem_cache* tmem_page_content_desc_cachep;
 struct kmem_cache* tmem_objects_cachep;
 struct kmem_cache* tmem_object_nodes_cachep;
-struct bloom_filter* tmem_system_bloom_filter;
-/* choose based on first byte of page*/ 
-struct tmem_system_view tmem_system;
-//struct rb_root pcd_tree_roots[256]; 
-/* poor man's concurrency for now */
-//rwlock_t pcd_tree_rwlocks[256]; 
-//long long deduped_puts;
+/*
+struct rb_root pcd_tree_roots[256]; 
+rwlock_t pcd_tree_rwlocks[256]; 
+*/
 /******************************************************************************/ 
 /*                                                      List global variables */
 /******************************************************************************/ 
@@ -116,7 +122,132 @@ u64 failed_tmem_page_invalidates;
 /******************************************************************************/ 
 /*                                                     End Debugfs files/vars */
 /******************************************************************************/ 
+//static void check_remote_sharing_op(unsigned long data)
+void check_remote_sharing_op(void)
+{
+        struct tmem_page_content_descriptor *pcd;
+        uint8_t byte;
+        bool bloom_res;
+        /* 
+         * every time our bloom filter is send across, for each pcd in rscl we
+         * explore the option of remote deduplication without bothering about
+         * whether our bloom filter was successfully sent across or not and also
+         * without being concerned about whether we actually received any bloom
+         * filter from others or not.
+         */
 
+        /*
+         * for_each_pcd_in_rscl
+         * {
+         *      for_each_remote_server
+         *      {
+         *              check_bloom_filter
+         *              {
+         *                      if_hit
+         *                      {
+         *                              snd_page();
+         *
+         *                              if_remote_match
+         *                              {
+         *                                      update_ref_for_this_pcd;
+         *                                      release_page;
+         *                                      break;
+         *                              }
+         *                      }
+         *
+         *              }
+         *
+         *      }
+         * }
+         */
+
+        read_lock(&(tmem_system.system_list_rwlock));
+
+        if(!list_empty(&(tmem_system.remote_sharing_candidate_list)))
+        {
+                list_for_each_entry(pcd,\
+                                &(tmem_system.remote_sharing_candidate_list),\
+                                system_rscl_pcds)
+                {
+                        struct remote_server *rs;
+
+                        byte = tmem_get_first_byte(pcd->system_page);
+
+                        read_unlock(&(tmem_system.system_list_rwlock));
+
+                        read_lock(&rs_rwspinlock);
+
+                        if(!(list_empty(&rs_head)))
+                        {
+                                list_for_each_entry(rs, &(rs_head), rs_list)
+                                {
+                                        read_unlock(&rs_rwspinlock);
+
+                                        /* 
+                                         * create a bloom filter, you have only
+                                         * the bitmap
+                                         */
+
+                                        if(bloom_filter_check(rs->rs_bflt,\
+                                                              &byte, 1,\
+                                                              &bloom_res) < 0)
+                                        {
+                                                pr_info(" *** mtp | checking for"
+                                                        " rscl object in bloom "
+                                                        "filter failed | "
+                                                        "fwd_filter *** \n");
+                                        }
+
+                                        if(bloom_res == true)
+                                        {
+                                                pr_info(" *** mtp | the rscl "
+                                                        "object is present in "
+                                                        "bloom filter | "
+                                                        "fwd_filter *** \n");
+
+                                                if(tcp_client_snd_page(rs,\
+                                                        pcd->system_page) < 0 )
+                                                {
+                                                        pr_info(" *** mtp | "
+                                                                "page was not "
+                                                                "found with RS "
+                                                                ": %s | "
+                                                                "snd_page *** "
+                                                                "\n",rs->rs_ip);
+                                                }
+                                        }
+
+                                        read_lock(&rs_rwspinlock);
+                                }
+                        }
+
+                        read_unlock(&rs_rwspinlock);
+
+                        read_lock(&(tmem_system.system_list_rwlock));
+                
+                }
+        }
+
+        read_unlock(&(tmem_system.system_list_rwlock));
+}
+/******************************************************************************/
+/*			                          bloom filter transfer thread*/
+/******************************************************************************/
+int start_fwd_filter(struct bloom_filter *bflt)
+{
+        fwd_bflt_thread = 
+        kthread_run((void *)timed_fwd_filter, (void *)bflt, "fwd_bflt");
+
+        if(fwd_bflt_thread == NULL)
+                return -1;
+
+        get_task_struct(fwd_bflt_thread);
+
+        return 0;
+}
+/******************************************************************************/
+/*			                      End bloom filter transfer thread*/
+/******************************************************************************/
 /******************************************************************************/
 /*							  ktb helper functions*/
 /******************************************************************************/
@@ -1070,15 +1201,19 @@ refind:
                 {
                         //no match found,
                         //insert into client remote_sharing_candidate list
-                        spin_lock(&(tmem_system.system_list_lock));
+                        //spin_lock(&(tmem_system.system_list_lock));
+                        write_lock(&(tmem_system.system_list_rwlock));
+
                         list_add_tail(&(pgp->pcd->system_rscl_pcds),\
                                 &(tmem_system.remote_sharing_candidate_list));
-                        spin_unlock(&(tmem_system.system_list_lock));
+
+                        write_unlock(&(tmem_system.system_list_rwlock));
+                        //spin_unlock(&(tmem_system.system_list_lock));
                         update_summary(pgp);
                 }
                 /*
                  * This is not needed as only the matched pcd is to be moved
-                 * from the rscl to lol.
+                 * from the rscl to lol, which is done in pcd_associate().
                 else if(dedup_ret == 0)
                 {
                         //if dedup successful insert into_local_only list.
@@ -1093,10 +1228,15 @@ refind:
         {
                 //If no local dedup available
                 //insert into remote_sharing_candidate list 
-                spin_lock(&(tmem_system.system_list_lock));
+                //spin_lock(&(tmem_system.system_list_lock));
+                write_lock(&(tmem_system.system_list_rwlock));
+
                 list_add_tail(&(pgp->pcd->system_rscl_pcds),\
                         &(tmem_system.remote_sharing_candidate_list));
-                spin_unlock(&(tmem_system.system_list_lock));
+
+                write_unlock(&(tmem_system.system_list_rwlock));
+                //spin_unlock(&(tmem_system.system_list_lock));
+                update_summary(pgp);
         }
 /*
 	code to insert this object into various lists like the
@@ -1470,18 +1610,21 @@ static int __init ktb_main_init(void)
 				tmem_system.pcd_tree_roots[i] = RB_ROOT;
 				rwlock_init(&(tmem_system.pcd_tree_rwlocks[i]));
 			}
+
                 INIT_LIST_HEAD(&(tmem_system.remote_sharing_candidate_list));
                         INIT_LIST_HEAD(&(tmem_system.local_only_list));
-                        spin_lock_init(&(tmem_system.system_list_lock));
+                        rwlock_init(&(tmem_system.system_list_rwlock));
+                        //spin_lock_init(&(tmem_system.system_list_lock));
 		}
 
-                //start the tcp server
-                network_server_init();
-                //initialize bloom filter,
-                //mention size of bit_map,
-                //add the hash functions to be used by the bloom etc
-                //size of bit_map = 2^28 or 32 MB
-                tmem_system_bloom_filter = bloom_filter_new(268435456);
+                /*
+                initialize bloom filter,
+                mention size of bit_map,
+                add the hash functions to be used by the bloom etc
+                size of bit_map = 2^28 or 32 MB
+                */
+                tmem_system_bloom_filter = bloom_filter_new(bflt_bit_size);
+
                 if(IS_ERR(tmem_system_bloom_filter))
                 {
                         pr_info(" *** mtp | failed to allocate bloom_filter "
@@ -1505,6 +1648,31 @@ static int __init ktb_main_init(void)
                                 "failed | ktb_main_init *** \n");
 
                 bloom_filter_reset(tmem_system_bloom_filter);
+
+                //start the tcp server
+                if(network_server_init() != 0)
+                {
+                        pr_info(" *** mtp | failed to start the tcp server "
+                                "| ktb_main_init *** \n");
+                        //set error flag
+                        return 0;
+                }
+                /*
+                register the tcp server with the designated leader,
+                who is hard coded for now.
+                */
+                if(tcp_client_init() != 0)
+                {
+                        pr_info(" *** mtp | failed to register with the leader "
+                                "server | ktb_main_init *** \n");
+                        //set error flag
+                        return 0;
+                }
+
+                if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                        pr_info(" *** mtp | network server unable to start "
+                                "timed_fwd_bflt_thread | ktb_main_init "
+                                "*** \n");
 	}
 
         /*
@@ -1678,14 +1846,18 @@ static void __exit ktb_main_exit(void)
 	ktb_ops.kvm_host_destroy_client = NULL,
 
 	kvm_host_tmem_deregister_ops();
+
         debugfs_remove_recursive(root);
+
         bloom_filter_reset(tmem_system_bloom_filter);
+
         if(bloom_filter_unref(tmem_system_bloom_filter))
                 pr_info(" *** mtp | tmem_system_bloom_filter removed "
                         "successfully | ktb_main_exit \n");
         else
                 pr_info(" *** mtp | failed to remove tmem_system_bloom_filter "
                         "| ktb_main_exit \n");
+
         network_server_exit();
 
 	pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED | "

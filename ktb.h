@@ -216,7 +216,8 @@ struct tmem_system_view {
         rwlock_t pcd_tree_rwlocks[256]; 
         struct list_head remote_sharing_candidate_list;
         struct list_head local_only_list;
-        spinlock_t system_list_lock;
+        rwlock_t system_list_rwlock;
+        //spinlock_t system_list_lock;
 };
 /******************************************************************************/
 /*				  KTB pool object PAGE related data structures*/
@@ -310,7 +311,14 @@ extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 /*list functions*/
 extern void update_summary(struct tmem_page_descriptor*);
 
-/*tcp server*/
+/*
+//tcp server
 extern int network_server_init(void);
 extern void network_server_exit(void);
+
+//tcp client
+extern int tcp_client_init(void);
+extern void tcp_client_exit(void);
+extern int tcp_client_fwd_filter(struct bloom_filter *); 
+*/
 #endif /*_KTB_H_*/
