@@ -933,20 +933,3 @@ diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/include/linux/tme
 +/*END ABY MTP*/
 +
 +#endif
-Binary files kernel_source/linux-4.1.3-fresh/net/.socket.c.swo and work_area/linux-4.1.3/net/.socket.c.swo differ
-diff -Nr -U 5 -X ./diff_ignore kernel_source/linux-4.1.3-fresh/virt/kvm/kvm_main.c work_area/linux-4.1.3/virt/kvm/kvm_main.c
---- kernel_source/linux-4.1.3-fresh/virt/kvm/kvm_main.c	2015-07-21 22:40:33.000000000 +0530
-+++ work_area/linux-4.1.3/virt/kvm/kvm_main.c	2015-09-20 01:58:27.418134597 +0530
-@@ -1533,11 +1533,11 @@
- int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
- 			int len)
- {
- 	int r;
- 	unsigned long addr;
--
-+	
- 	addr = gfn_to_hva_prot(kvm, gfn, NULL);
- 	if (kvm_is_error_hva(addr))
- 		return -EFAULT;
- 	r = __copy_from_user(data, (void __user *)addr + offset, len);
- 	if (r)
