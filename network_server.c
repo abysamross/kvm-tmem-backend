@@ -41,7 +41,7 @@ int tcp_listener_stopped = 0;
 int tcp_listener_started = 0;
 int tcp_acceptor_stopped = 0;
 int tcp_acceptor_started = 0;
-static int timed_fwd_filter_stopped = 0;
+int timed_fwd_filter_stopped = 0;
 void *test_page_vaddr;
 struct page *test_page;
 //struct task_struct *fwd_bflt_thread = NULL;

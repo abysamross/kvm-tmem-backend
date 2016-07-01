@@ -61,6 +61,7 @@ extern int tcp_acceptor_stopped;
 extern int tcp_acceptor_started;
 extern int tcp_listener_stopped;
 extern int  tcp_listener_started;
+extern int timed_fwd_filter_stopped;
 
 extern int timed_fwd_filter(void *);
 extern struct task_struct *fwd_bflt_thread;

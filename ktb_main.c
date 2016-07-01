@@ -1879,6 +1879,8 @@ bfltfail:
 /******************************************************************************/
 static void __exit ktb_main_exit(void)
 {
+        int ret;
+
 	ktb_ops.kvm_host_new_pool = NULL;
 	ktb_ops.kvm_host_put_page = NULL;
 	ktb_ops.kvm_host_get_page = NULL;
@@ -1900,6 +1902,22 @@ static void __exit ktb_main_exit(void)
         else
                 pr_info(" *** mtp | failed to remove tmem_system_bloom_filter "
                         "| ktb_main_exit \n");
+
+        if(fwd_bflt_thread != NULL)
+        {
+                if(!timed_fwd_filter_stopped)
+                {
+                        ret = kthread_stop(fwd_bflt_thread);
+
+                        if(!ret)
+                                pr_info(" *** mtp | timed forward filter thread"
+                                        " stopped: %d | network_server_exit *** \n",
+                                        ret);
+
+                        if(fwd_bflt_thread != NULL)
+                                put_task_struct(fwd_bflt_thread);
+                }
+        }
 
         network_server_exit();
 
