@@ -31,17 +31,16 @@ MODULE_AUTHOR("Aby Sam Ross");
 
 #define DEFAULT_PORT 2325
 #define MODULE_NAME "tmem_tcp_server"
-#define MAX_CONNS 16
 
 DEFINE_RWLOCK(rs_rwspinlock);
 LIST_HEAD(rs_head);
 
 //int bit_size = 268435456;
 int delay = 60;
-static int tcp_listener_stopped = 0;
-static int tcp_listener_started = 0;
-static int tcp_acceptor_stopped = 0;
-static int tcp_acceptor_started = 0;
+int tcp_listener_stopped = 0;
+int tcp_listener_started = 0;
+int tcp_acceptor_stopped = 0;
+int tcp_acceptor_started = 0;
 static int timed_fwd_filter_stopped = 0;
 void *test_page_vaddr;
 struct page *test_page;
@@ -53,6 +52,7 @@ DEFINE_SPINLOCK(tcp_server_lock);
 static DECLARE_RWSEM(rs_rwmutex);
 */
 
+/*
 struct tcp_conn_handler_data
 {
         struct sockaddr_in *address;
@@ -65,13 +65,9 @@ struct tcp_conn_handler_data
 
 struct tcp_conn_handler
 {
-        struct tcp_conn_handler_data *data[MAX_CONNS];
         struct task_struct *thread[MAX_CONNS];
         int tcp_conn_handler_stopped[MAX_CONNS]; 
 };
-
-struct tcp_conn_handler *tcp_conn_handler;
-
 
 struct tcp_server_service
 {
@@ -80,6 +76,8 @@ struct tcp_server_service
       struct task_struct *thread;
       struct task_struct *accept_thread;
 };
+*/
+struct tcp_conn_handler *tcp_conn_handler;
 
 struct tcp_server_service *tcp_server;
 
@@ -1305,6 +1303,7 @@ int network_server_init(void)
                 return -1;
         }
 
+        /*
         if(tcp_client_init() != 0) 
         {
                 int ret;
@@ -1342,6 +1341,7 @@ int network_server_init(void)
                 tcp_server = NULL;
                 return -1;
         }
+        */
 
         /*
         if(bflt)

@@ -1,6 +1,7 @@
 #ifndef _LTCP_H_
 #define _LTCP_H_
 
+#define MAX_CONNS 16
 /*
 struct bloom_filter {
 	struct kref		kref;
@@ -28,6 +29,38 @@ struct remote_server
         struct list_head rs_list;
         struct bloom_filter *rs_bflt;
 };
+
+struct tcp_conn_handler_data
+{
+        struct sockaddr_in *address;
+        struct socket *accept_socket;
+        int thread_id;
+        char *ip;
+        int port;
+        char *in_buf;
+};
+
+struct tcp_conn_handler
+{
+        struct tcp_conn_handler_data *data[MAX_CONNS];
+        struct task_struct *thread[MAX_CONNS];
+        int tcp_conn_handler_stopped[MAX_CONNS]; 
+};
+
+struct tcp_server_service
+{
+      int running;  
+      struct socket *listen_socket;
+      struct task_struct *thread;
+      struct task_struct *accept_thread;
+};
+
+extern struct tcp_server_service *tcp_server;
+extern struct tcp_conn_handler *tcp_conn_handler;
+extern int tcp_acceptor_stopped;
+extern int tcp_acceptor_started;
+extern int tcp_listener_stopped;
+extern int  tcp_listener_started;
 
 extern int timed_fwd_filter(void *);
 extern struct task_struct *fwd_bflt_thread;

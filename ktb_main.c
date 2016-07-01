@@ -1630,7 +1630,7 @@ static int __init ktb_main_init(void)
                         pr_info(" *** mtp | failed to allocate bloom_filter "
                                 "| ktb_main_init *** \n");
                         //set error flag
-                        return 0;
+                        goto bfltfail;
                 }
                 else
                         pr_info(" *** mtp | successfully allocated bloom_filter"
@@ -1655,7 +1655,7 @@ static int __init ktb_main_init(void)
                         pr_info(" *** mtp | failed to start the tcp server "
                                 "| ktb_main_init *** \n");
                         //set error flag
-                        return 0;
+                        goto netfail;
                 }
                 /*
                 register the tcp server with the designated leader,
@@ -1663,10 +1663,45 @@ static int __init ktb_main_init(void)
                 */
                 if(tcp_client_init() != 0)
                 {
+                        int ret;
+
                         pr_info(" *** mtp | failed to register with the leader "
                                 "server | ktb_main_init *** \n");
-                        //set error flag
-                        return 0;
+                        
+                        if(tcp_acceptor_started && !tcp_acceptor_stopped)
+                        {
+                                ret = kthread_stop(tcp_server->accept_thread);
+                                if(!ret)
+                                        pr_info(" *** mtp | stopping tcp server"
+                                                " accept thread as local client"
+                                                " could not setup a connection"
+                                                " with leader server |"
+                                                " network_server_init *** \n");
+                        }
+
+                        if(tcp_listener_started && !tcp_listener_stopped)
+                        {
+                                ret = kthread_stop(tcp_server->thread);
+                                if(!ret)
+                                        pr_info(" *** mtp | stopping tcp server"
+                                                " listening thread as local"
+                                                " client could not setup a"
+                                                " connection with leader server"
+                                                " | network_server_init *** \n");
+
+                                if(tcp_server->listen_socket != NULL)
+                                {
+                                        sock_release(tcp_server->listen_socket);
+                                        tcp_server->listen_socket = NULL;
+                                }
+                        }
+                        
+
+                        kfree(tcp_conn_handler);
+                        kfree(tcp_server);
+                        //vfree(bflt);
+                        goto netfail;
+
                 }
 
                 if(start_fwd_filter(tmem_system_bloom_filter) < 0)
@@ -1826,6 +1861,14 @@ static int __init ktb_main_init(void)
         show_msg(bloom_filter_check);
 	// end en/dis-able bloom_filter.c output
 	return 0;
+
+netfail:
+
+        vfree(tmem_system_bloom_filter);
+
+bfltfail:
+
+        return -1;
 }
 /******************************************************************************/
 /*						           END KTB MODULE INIT*/
