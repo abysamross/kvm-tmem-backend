@@ -84,7 +84,6 @@ void update_summary(struct tmem_page_descriptor* pgp)
                         pcd->pgp->obj->oid.oid[0], 
                         pcd->pgp->index);
 
-        byte = tmem_get_first_byte(pcd->system_page);
         
         /* 
          * now the bloom filter should be under lock, as I don't want the network
@@ -92,6 +91,11 @@ void update_summary(struct tmem_page_descriptor* pgp)
          * The bloom filter implementation already has a mutex that locks it
          * while accessing it for add and other operations.
          */
+        if(tmem_system_bloom_filter == NULL)
+                return;
+
+        byte = tmem_get_first_byte(pcd->system_page);
+
         if(bloom_filter_add(tmem_system_bloom_filter, &byte, 1))
                 pr_info(" *** mtp | adding rscl object to bloom filter failed "
                         "| update_summary *** \n");

@@ -170,19 +170,24 @@ void check_remote_sharing_op(void)
                                 system_rscl_pcds)
                 {
                         struct remote_server *rs;
+                        struct page *pg = alloc_page(GFP_ATOMIC);
+                        void *vaddr1, *vaddr2;
 
                         byte = tmem_get_first_byte(pcd->system_page);
+                        vaddr1 = page_address(pg);
+                        memset(vaddr1, 0, PAGE_SIZE);
+                        vaddr2 = page_address(pcd->system_page);
+                        memcpy(vaddr1, vaddr2, PAGE_SIZE);
 
                         read_unlock(&(tmem_system.system_list_rwlock));
 
-                        read_lock(&rs_rwspinlock);
-
+                        //read_lock(&rs_rwspinlock);
+                        down_read(&rs_rwmutex);
                         if(!(list_empty(&rs_head)))
                         {
                                 list_for_each_entry(rs, &(rs_head), rs_list)
                                 {
-                                        read_unlock(&rs_rwspinlock);
-
+                                        //read_unlock(&rs_rwspinlock);
                                         /* 
                                          * create a bloom filter, you have only
                                          * the bitmap
@@ -206,7 +211,7 @@ void check_remote_sharing_op(void)
                                                         "fwd_filter *** \n");
 
                                                 if(tcp_client_snd_page(rs,\
-                                                        pcd->system_page) < 0 )
+                                                        pg) < 0 )
                                                 {
                                                         pr_info(" *** mtp | "
                                                                 "page was not "
@@ -217,17 +222,16 @@ void check_remote_sharing_op(void)
                                                 }
                                         }
 
-                                        read_lock(&rs_rwspinlock);
+                                        //read_lock(&rs_rwspinlock);
                                 }
                         }
-
-                        read_unlock(&rs_rwspinlock);
+                        up_read(&rs_rwmutex);
+                        //read_unlock(&rs_rwspinlock);
+                        __free_page(pg);
 
                         read_lock(&(tmem_system.system_list_rwlock));
-                
                 }
         }
-
         read_unlock(&(tmem_system.system_list_rwlock));
 }
 /******************************************************************************/
@@ -1246,8 +1250,8 @@ refind:
         Also code to update this VM's summary inline/synchronously with a put
         should go after this.
 
-        We can also add the pcd instead of the pgp. As the number of pcds are 
-        less than pgps. Then it becomes a host wide summary instead of per VM.
+        We can also add the pcd instead of the pgp. As the pgps are the unique
+        entities than pgps. Then it becomes a host wide summary instead of per VM.
 */
         /*
         pr_info(" *** mtp | calling make_summary() | ktb_get_page *** \n");
@@ -1567,18 +1571,47 @@ static int __init ktb_main_init(void)
 	pr_info(" *** mtp | kvm_tmem_bknd_enabled: %d, use_cleancache: %d | "
 		"ktb_main_init *** \n", kvm_tmem_bknd_enabled, use_cleancache);
 
+
 	if (kvm_tmem_bknd_enabled && use_cleancache)
 	{
 
 
 		pr_info(" *** mtp | Boot Parameter Working | "
 			"ktb_main_init *** \n");
-		//BUG_ON(sizeof(struct cleancache_filekey) !=
-		//sizeof(struct tmem_oid));
+                /*
+                initialize bloom filter,
+                mention size of bit_map,
+                add the hash functions to be used by the bloom etc
+                size of bit_map = 2^28 or 32 MB
+                */
+                tmem_system_bloom_filter = bloom_filter_new(bflt_bit_size);
 
-                //memset(ktb_all_clients, 0, sizeof(struct tmem_client));
+                if(IS_ERR(tmem_system_bloom_filter))
+                {
+                        pr_info(" *** mtp | failed to allocate bloom_filter "
+                                "| ktb_main_init *** \n");
 
-       		//ktb_radix_tree_init_maxindex();
+                        tmem_system_bloom_filter = NULL;
+                        //set error flag
+                        goto bfltfail;
+                }
+                else
+                        pr_info(" *** mtp | successfully allocated bloom_filter"
+                                        " | ktb_main_init *** \n");
+
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
+                                        "crc32c"))
+                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                                "failed | ktb_main_init *** \n");
+
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
+                                        "sha1"))
+                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                                "failed | ktb_main_init *** \n");
+
+                bloom_filter_reset(tmem_system_bloom_filter);
+
+                /* register the tmem backend ops */
 		kvm_host_tmem_register_ops(&ktb_ops);
 
 		pr_info(" *** mtp | Cleancache enabled using: %s | "
@@ -1617,51 +1650,20 @@ static int __init ktb_main_init(void)
                         //spin_lock_init(&(tmem_system.system_list_lock));
 		}
 
-                /*
-                initialize bloom filter,
-                mention size of bit_map,
-                add the hash functions to be used by the bloom etc
-                size of bit_map = 2^28 or 32 MB
-                */
-                tmem_system_bloom_filter = bloom_filter_new(bflt_bit_size);
-
-                if(IS_ERR(tmem_system_bloom_filter))
-                {
-                        pr_info(" *** mtp | failed to allocate bloom_filter "
-                                "| ktb_main_init *** \n");
-                        //set error flag
-                        goto bfltfail;
-                }
-                else
-                        pr_info(" *** mtp | successfully allocated bloom_filter"
-                                " | ktb_main_init *** \n");
-
-
-                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
-                                        "crc32c"))
-                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
-                                "failed | ktb_main_init *** \n");
-
-                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
-                                        "sha1"))
-                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
-                                "failed | ktb_main_init *** \n");
-
-                bloom_filter_reset(tmem_system_bloom_filter);
-
                 //start the tcp server
                 if(network_server_init() != 0)
                 {
                         pr_info(" *** mtp | failed to start the tcp server "
                                 "| ktb_main_init *** \n");
+                        vfree(tmem_system_bloom_filter);
                         //set error flag
-                        goto netfail;
+                        //goto netfail;
                 }
                 /*
                 register the tcp server with the designated leader,
                 who is hard coded for now.
                 */
-                if(tcp_client_init() != 0)
+                else if(tcp_client_init() != 0)
                 {
                         int ret;
 
@@ -1699,15 +1701,18 @@ static int __init ktb_main_init(void)
 
                         kfree(tcp_conn_handler);
                         kfree(tcp_server);
+                        vfree(tmem_system_bloom_filter);
                         //vfree(bflt);
-                        goto netfail;
+                        //goto netfail;
 
                 }
-
-                if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                else if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                {
                         pr_info(" *** mtp | network server unable to start "
                                 "timed_fwd_bflt_thread | ktb_main_init "
                                 "*** \n");
+                        vfree(tmem_system_bloom_filter);
+                }
 	}
 
         /*
@@ -1862,9 +1867,11 @@ static int __init ktb_main_init(void)
 	// end en/dis-able bloom_filter.c output
 	return 0;
 
+        /*
 netfail:
 
         vfree(tmem_system_bloom_filter);
+        */
 
 bfltfail:
 
@@ -1880,19 +1887,46 @@ bfltfail:
 static void __exit ktb_main_exit(void)
 {
         int ret;
+        int cli_id;
 
 	ktb_ops.kvm_host_new_pool = NULL;
 	ktb_ops.kvm_host_put_page = NULL;
 	ktb_ops.kvm_host_get_page = NULL;
 	ktb_ops.kvm_host_flush_page = NULL;
 	ktb_ops.kvm_host_flush_object = NULL;
-	ktb_ops.kvm_host_destroy_pool = NULL,
-	ktb_ops.kvm_host_create_client = NULL,
-	ktb_ops.kvm_host_destroy_client = NULL,
+	ktb_ops.kvm_host_destroy_pool = NULL;
+	ktb_ops.kvm_host_create_client = NULL;
+	ktb_ops.kvm_host_destroy_client = NULL;
 
 	kvm_host_tmem_deregister_ops();
 
+        for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
+        {
+                ktb_destroy_client(cli_id);
+        }
+
         debugfs_remove_recursive(root);
+
+        mutex_lock(&timed_ff_mutex);
+        if(fwd_bflt_thread != NULL)
+        {
+                if(!timed_fwd_filter_stopped)
+                {
+                        pr_info(" *** !! *** !! *** \n");
+                        ret = kthread_stop(fwd_bflt_thread);
+
+                        if(!ret)
+                                pr_info(" *** mtp | timed forward filter thread"
+                                        " stopped: %d | ktb_main_exit *** \n",
+                                        ret);
+
+                        if(fwd_bflt_thread != NULL)
+                                put_task_struct(fwd_bflt_thread);
+                }
+        }
+        mutex_unlock(&timed_ff_mutex);
+
+        if(fwd_bflt_thread != NULL)
 
         bloom_filter_reset(tmem_system_bloom_filter);
 
@@ -1902,22 +1936,6 @@ static void __exit ktb_main_exit(void)
         else
                 pr_info(" *** mtp | failed to remove tmem_system_bloom_filter "
                         "| ktb_main_exit \n");
-
-        if(fwd_bflt_thread != NULL)
-        {
-                if(!timed_fwd_filter_stopped)
-                {
-                        ret = kthread_stop(fwd_bflt_thread);
-
-                        if(!ret)
-                                pr_info(" *** mtp | timed forward filter thread"
-                                        " stopped: %d | network_server_exit *** \n",
-                                        ret);
-
-                        if(fwd_bflt_thread != NULL)
-                                put_task_struct(fwd_bflt_thread);
-                }
-        }
 
         network_server_exit();
 

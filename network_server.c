@@ -32,7 +32,9 @@ MODULE_AUTHOR("Aby Sam Ross");
 #define DEFAULT_PORT 2325
 #define MODULE_NAME "tmem_tcp_server"
 
-DEFINE_RWLOCK(rs_rwspinlock);
+//DEFINE_RWLOCK(rs_rwspinlock);
+DEFINE_MUTEX(timed_ff_mutex);
+DECLARE_RWSEM(rs_rwmutex);
 LIST_HEAD(rs_head);
 
 //int bit_size = 268435456;
@@ -49,7 +51,6 @@ struct page *test_page;
 struct bloom_filter *bflt = NULL;
 struct socket *client_conn_socket = NULL;
 DEFINE_SPINLOCK(tcp_server_lock);
-static DECLARE_RWSEM(rs_rwmutex);
 */
 
 /*
@@ -333,11 +334,11 @@ struct remote_server *register_rs(struct socket *socket, char* ip, int port)
         pr_info(" *** mtp | registered remote server with ip: %s:%d | "
                 "register_rs ***\n", rs->rs_ip, rs->rs_port);
 
-        //down_write(&rs_rwmutex);
-        write_lock(&rs_rwspinlock);
+        down_write(&rs_rwmutex);
+        //write_lock(&rs_rwspinlock);
         list_add_tail(&(rs->rs_list), &(rs_head));
-        write_unlock(&rs_rwspinlock);
-        //up_write(&rs_rwmutex);
+        //write_unlock(&rs_rwspinlock);
+        up_write(&rs_rwmutex);
 
         return rs;
 }
@@ -385,8 +386,8 @@ void deregister_rs(void)
         struct list_head *pos = NULL;
         struct list_head *pos_next = NULL;
 
-        //down_write(&rs_rwmutex);
-        write_lock(&rs_rwspinlock);
+        down_write(&rs_rwmutex);
+        //write_lock(&rs_rwspinlock);
         if(!(list_empty(&rs_head)))
         {
                 //list_for_each_entry(rs_tmp, &(rs_head), rs_list)
@@ -407,8 +408,8 @@ void deregister_rs(void)
                         kfree(rs);
                 }
         }
-        write_unlock(&rs_rwspinlock);
-        //up_write(&rs_rwmutex);
+        //write_unlock(&rs_rwspinlock);
+        up_write(&rs_rwmutex);
 
 }
 
@@ -452,14 +453,14 @@ struct remote_server* look_up_rs(char *ip, int port)
 {
         struct remote_server *rs_tmp;
 
-        //down_read(&rs_rwmutex);
-        read_lock(&rs_rwspinlock);
+        down_read(&rs_rwmutex);
+        //read_lock(&rs_rwspinlock);
         if(!(list_empty(&rs_head)))
         {
                 list_for_each_entry(rs_tmp, &(rs_head), rs_list)
                 {
                         //up_read(&rs_rwmutex);
-                        read_unlock(&rs_rwspinlock);
+                        //read_unlock(&rs_rwspinlock);
                         if(strcmp(rs_tmp->rs_ip, ip) == 0)
                         {
                                 pr_info(" *** mtp | found remote server "
@@ -467,15 +468,16 @@ struct remote_server* look_up_rs(char *ip, int port)
                                         "| look_up_rs ***\n", 
                                         rs_tmp->rs_ip, rs_tmp->rs_port);
 
+                                up_read(&rs_rwmutex);
                                 return rs_tmp;
                         }
-                        read_lock(&rs_rwspinlock);
+                        //read_lock(&rs_rwspinlock);
                         //down_read(&rs_rwmutex);
                 }
         }
         //else
-        read_unlock(&rs_rwspinlock);
-        //up_read(&rs_rwmutex);
+        //read_unlock(&rs_rwspinlock);
+        up_read(&rs_rwmutex);
 
         return NULL;
 }
@@ -497,12 +499,12 @@ void drop_connection(struct tcp_conn_handler_data *conn)
 
       rs = look_up_rs(ip, port);
 
+      down_write(&rs_rwmutex);
       if(rs != NULL)
       {
-              //down_write(&rs_rwmutex);
-              write_lock(&rs_rwspinlock);
+              //write_lock(&rs_rwspinlock);
               list_del_init(&(rs->rs_list));
-              write_unlock(&rs_rwspinlock);
+              //write_unlock(&rs_rwspinlock);
               //up_write(&rs_rwmutex);
               sock_release(rs->lcc_socket);
               if(rs->rs_ip != NULL)
@@ -512,6 +514,7 @@ void drop_connection(struct tcp_conn_handler_data *conn)
                       vfree(rs->rs_bflt);
               kfree(rs);
       }
+      up_write(&rs_rwmutex);
       kfree(ip);
 }
 
@@ -550,13 +553,13 @@ struct remote_server *create_and_register_rs(char *ip, int port)
                       "this server to rs:%s |"
                       " create_and_register_rs ***\n", err, ip);
 
-              //down_write(&rs_rwmutex);
-              write_lock(&rs_rwspinlock);
+              down_write(&rs_rwmutex);
+              //write_lock(&rs_rwspinlock);
               list_del_init(&(rs->rs_list));
-              write_unlock(&rs_rwspinlock);
-              //up_write(&rs_rwmutex);
+              //write_unlock(&rs_rwspinlock);
               kfree(rs->rs_ip);
               kfree(rs);
+              up_write(&rs_rwmutex);
               goto fail;
         }
 
@@ -664,10 +667,12 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
       }
 
       /*free the bitmap for an existing server*/
+      down_write(&rs_rwmutex);
       if(rs->rs_bflt != NULL)
               vfree(rs->rs_bflt);
 
       rs->rs_bflt = bflt;
+      up_write(&rs_rwmutex);
 
       pr_info(" *** mtp | server[%d] testing received bitmap of rs: [%s]\n"
               "bitmap[0]: %d, bitmap[10]: %d |\n receive_bflt ***\n", 
@@ -822,9 +827,11 @@ pageresp:
                               drop_connection(conn_data);
                       
                       }
+                      /* this is aplicable only to the thread handling connection
+                       * to the leader */
                       else if(memcmp(in_buf, "ADIOS", 5) == 0)
                       {
-                              int r;
+                              int r = 1;
                               memset(out_buf, 0, len+1);
                               strcat(out_buf, "ADIOSAMIGO");
                               pr_info(" *** mtp | sending response: %s"
@@ -836,11 +843,26 @@ pageresp:
                                * Not only that, the entire local server 
                                * module should be brought down as there is
                                * no longer a leader server */
-                              r = kthread_stop(fwd_bflt_thread);
+                              mutex_lock(&timed_ff_mutex);
+                              if(fwd_bflt_thread != NULL)
+                              {
+                                      if(!timed_fwd_filter_stopped)
+                                      {
+                                              r = kthread_stop(fwd_bflt_thread);
 
-                              if(!r)
-                                      pr_info(" *** mtp | timed forward filter thread"
-                                              " stopped | connection_handler *** \n");
+                                              if(!r)
+                                              {
+                                                      if(fwd_bflt_thread != NULL)
+                                                              put_task_struct(fwd_bflt_thread);
+
+                                                      timed_fwd_filter_stopped = 1;
+
+                                                      pr_info(" *** mtp | timed forward filter thread"
+                                                              " stopped | connection_handler *** \n");
+                                              }
+                                      }
+                              }
+                              mutex_unlock(&timed_ff_mutex);
 
                               if(cli_conn_socket)
                               {
@@ -1127,7 +1149,9 @@ int timed_fwd_filter(void* data)
                 /*
                 try_to_freeze();
 
-                jleft = wait_event_freezable_timeout(timed_fflt_wait, (kthread_should_stop() == true),
+                jleft = 
+                wait_event_freezable_timeout(timed_fflt_wait,
+                                        (kthread_should_stop() == true),
                                            delay*HZ);
                 */
 
@@ -1171,7 +1195,7 @@ int timed_fwd_filter(void* data)
                                 "failed | timed_fwd_filter *** \n");
                 }
 
-                check_remote_sharing_op();
+                //check_remote_sharing_op();
 
                 set_current_state(TASK_INTERRUPTIBLE);
 
