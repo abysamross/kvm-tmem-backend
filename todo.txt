@@ -7,3 +7,5 @@ the spinlocks are unlocked.
 2. Test the leader_server_client and local_server_client separately, as the
 protocol was changed to send the size of bloom filter in bits to other RS from
 the leader_server.
+
+3. Should I use bloom_filter_unref before freeing up my bloom filter and others?

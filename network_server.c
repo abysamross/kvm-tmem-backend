@@ -37,15 +37,66 @@ DEFINE_MUTEX(timed_ff_mutex);
 DECLARE_RWSEM(rs_rwmutex);
 LIST_HEAD(rs_head);
 
+int debug_tcp_server_send = 0;
+int debug_tcp_server_receive = 0;
+int debug_compare_page = 0;
+int debug_rcv_and_cmp_page = 0;
+int debug_register_rs = 0;
+int debug_deregister_rs = 0;
+int debug_look_up_rs = 0;
+int debug_drop_connection = 0;
+int debug_create_and_register_rs = 0;
+int debug_receive_bflt = 0;
+int debug_connection_handler = 0;
+int debug_tcp_server_accept = 0;
+int debug_tcp_server_listen = 0;
+int debug_timed_fwd_filter = 0;
+int debug_tcp_server_start = 0;
+
+int debug_tcp_client_send = 0;
+int debug_tcp_client_receive = 0;
+int debug_tcp_client_snd_page = 0;
+int debug_tcp_client_fwd_filter = 0;
+int debug_tcp_client_connect_rs = 0;
+int debug_tcp_client_connect = 0;
+
+int show_msg_tcp_server_send = 0;
+int show_msg_tcp_server_receive = 0;
+int show_msg_compare_page = 0;
+int show_msg_rcv_and_cmp_page = 0;
+int show_msg_register_rs = 0;
+int show_msg_deregister_rs = 0;
+int show_msg_look_up_rs = 0;
+int show_msg_drop_connection = 0;
+int show_msg_create_and_register_rs = 0;
+int show_msg_receive_bflt = 0;
+int show_msg_connection_handler = 0;
+int show_msg_tcp_server_accept = 0;
+int show_msg_tcp_server_listen = 0;
+int show_msg_timed_fwd_filter = 0;
+int show_msg_tcp_server_start = 0;
+
+int show_msg_tcp_client_send = 0;
+int show_msg_tcp_client_receive = 0;
+int show_msg_tcp_client_snd_page = 0;
+int show_msg_tcp_client_fwd_filter = 0;
+int show_msg_tcp_client_connect_rs = 0;
+int show_msg_tcp_client_connect = 0;
+
 //int bit_size = 268435456;
-int delay = 60;
+int delay = 120;
 int tcp_listener_stopped = 0;
 int tcp_listener_started = 0;
 int tcp_acceptor_stopped = 0;
 int tcp_acceptor_started = 0;
 int timed_fwd_filter_stopped = 0;
-void *test_page_vaddr;
-struct page *test_page;
+
+extern void *test_page_vaddr;
+extern struct page *test_page;
+extern int pcd_remote_associate(struct page*);
+extern int tmem_remote_dedups;
+extern int succ_tmem_remote_dedups;
+extern int failed_tmem_remote_dedups;
 //struct task_struct *fwd_bflt_thread = NULL;
 /*
 struct bloom_filter *bflt = NULL;
@@ -199,6 +250,7 @@ read_again:
                         goto recv_out;
 
                 count--;
+
                 if(len > 0)
                 {
                         //pr_info("len: %d\n", len);
@@ -214,13 +266,21 @@ read_again:
         }
         //len = msg.msg_iter.kvec->iov_len;
 recv_out:
-        pr_info(" *** mtp | return from receive after reading total: %d bytes, "
-                "last read: %d bytes | tcp_client_send \n", totread, len);
+
+        if(can_show(tcp_server_receive))
+        {
+                pr_info(" *** mtp | return from receive after reading total: "
+                        "%d bytes, last read: %d bytes | tcp_server_receive \n", 
+                        totread, len);
+        }
+
         return totread?totread:len;
 }
 
-int compare_page(struct page *new_page, void *new_page_vaddr)
+//int compare_page(struct page *new_page, void *new_page_vaddr)
+int compare_page(struct page *new_page)
 {
+        /*
         void *vaddr;
         int ret1 = 0;
         int ret2 = 0;
@@ -228,18 +288,43 @@ int compare_page(struct page *new_page, void *new_page_vaddr)
         vaddr = page_address(new_page);
         
         ret1 = memcmp(vaddr, test_page_vaddr, PAGE_SIZE);
-        pr_info(" *** mtp | page test 1 result: %d | compare_page ***\n", ret1);
+
+        if(can_show(compare_page))
+                pr_info(" *** mtp | page test 1 result: %d | "
+                        "compare_page ***\n", ret1);
 
         ret2 = memcmp(new_page_vaddr, test_page_vaddr, PAGE_SIZE);
-        pr_info(" *** mtp | page test 2 result: %d | compare_page ***\n", ret2);
 
-        if((ret1 == 0) && (ret2 == 0))
+        if(can_show(compare_page))
+                pr_info(" *** mtp | page test 2 result: %d | "
+                        "compare_page ***\n", ret2);
+
+
+        if(can_show(compare_page))
         {
-                pr_info(" *** mtp | page tests passed | compare_page ***\n");
+                if((ret1 == 0) && (ret2 == 0))
+                {
+                        pr_info(" *** mtp | page tests passed | "
+                                "compare_page ***\n");
+                        return 0;
+                }
+        }
+        */
+        if(pcd_remote_associate(new_page))
+        {
+                if(can_show(compare_page))
+                        pr_info(" *** mtp | page test FAILED |"
+                                " compare_page ***\n");
+                return -1;
+        }
+        else
+        {
+                if(can_show(compare_page))
+                        pr_info(" *** mtp | page test SUCCEEDED |"
+                                " compare_page ***\n");
                 return 0;
         }
 
-        return -1;
 }
 
 int rcv_and_cmp_page(struct tcp_conn_handler_data *conn)
@@ -287,8 +372,10 @@ int rcv_and_cmp_page(struct tcp_conn_handler_data *conn)
         memset(out_buf, 0, len+1);
         strcat(out_buf, "SEND:PAGE");
 
-        pr_info(" *** mtp | server[%d] sending response: %s for page of rs: %s"
-                " | rcv_and_cmp_page ***\n", conn->thread_id, out_buf, conn->ip);
+        if(can_debug(rcv_and_cmp_page))
+                pr_info(" *** mtp | server[%d] sending response: %s for page"
+                        " of rs: %s | rcv_and_cmp_page ***\n",
+                        conn->thread_id, out_buf, conn->ip);
 
         ret =
         tcp_server_send(conn->accept_socket,(void *)out_buf,strlen(out_buf),\
@@ -298,13 +385,16 @@ int rcv_and_cmp_page(struct tcp_conn_handler_data *conn)
         tcp_server_receive(conn->accept_socket, new_page_vaddr, PAGE_SIZE,\
                            MSG_DONTWAIT, 1);
 
-        pr_info(" *** mtp | server[%d] received page (size: %d) of rs: [%s] | "
-                "rcv_and_cmp_page ***\n", conn->thread_id, ret, conn->ip);
+        if(can_debug(rcv_and_cmp_page))
+                pr_info(" *** mtp | server[%d] received page (size: %d) of"
+                        " rs: [%s] | rcv_and_cmp_page ***\n",
+                        conn->thread_id, ret, conn->ip);
 
         if(ret != PAGE_SIZE)
                 goto recv_page_fail;
 
-        if(compare_page(new_page, new_page_vaddr) < 0)
+        //if(compare_page(new_page, new_page_vaddr) < 0)
+        if(compare_page(new_page) < 0)
                 goto recv_page_fail;
 
         return 0;
@@ -331,8 +421,9 @@ struct remote_server *register_rs(struct socket *socket, char* ip, int port)
         rs->rs_bmap_size = 0;
         rs->rs_bflt = NULL;
         
-        pr_info(" *** mtp | registered remote server with ip: %s:%d | "
-                "register_rs ***\n", rs->rs_ip, rs->rs_port);
+        if(can_show(register_rs))
+                pr_info(" *** mtp | registered remote server with ip: %s:%d | "
+                        "register_rs ***\n", rs->rs_ip, rs->rs_port);
 
         down_write(&rs_rwmutex);
         //write_lock(&rs_rwspinlock);
@@ -394,10 +485,12 @@ void deregister_rs(void)
                 list_for_each_safe(pos, pos_next, &(rs_head))
                 {
                         rs = list_entry(pos, struct remote_server, rs_list);
-                        pr_info(" *** mtp | found remote server "
-                                "info:\n | ip-> %s | port-> %d "
-                                "| deregister_rs ***\n", 
-                                rs->rs_ip, rs->rs_port);
+
+                        if(can_debug(deregister_rs))
+                                pr_info(" *** mtp | found remote server "
+                                        "info:\n | ip-> %s | port-> %d "
+                                        "| deregister_rs ***\n", 
+                                        rs->rs_ip, rs->rs_port);
 
                         list_del_init(&(rs->rs_list));
                         sock_release(rs->lcc_socket);
@@ -463,10 +556,11 @@ struct remote_server* look_up_rs(char *ip, int port)
                         //read_unlock(&rs_rwspinlock);
                         if(strcmp(rs_tmp->rs_ip, ip) == 0)
                         {
-                                pr_info(" *** mtp | found remote server "
-                                        "info:\n | ip-> %s | port-> %d "
-                                        "| look_up_rs ***\n", 
-                                        rs_tmp->rs_ip, rs_tmp->rs_port);
+                                if(can_debug(look_up_rs))
+                                        pr_info(" *** mtp | found remote server"
+                                                " info:\n | ip-> %s | port-> %d"
+                                                " | look_up_rs ***\n", 
+                                                rs_tmp->rs_ip, rs_tmp->rs_port);
 
                                 up_read(&rs_rwmutex);
                                 return rs_tmp;
@@ -528,19 +622,21 @@ struct remote_server *create_and_register_rs(char *ip, int port)
 
         if(err < 0 || rs_socket == NULL)
         {
-              pr_info("*** mtp | error: %d creating "
-                      "remote server connection socket for rs: %s |"
-                      "create_and_register_rs ***\n", err, ip);
-
-              goto fail;
+                if(can_debug(create_and_register_rs))
+                        pr_info("*** mtp | error: %d creating "
+                                "remote server connection socket for rs: %s |"
+                                "create_and_register_rs ***\n", err, ip);
+                goto fail;
         }
 
         rs = register_rs(rs_socket, ip, port);
 
         if(rs == NULL)
         {
-                pr_info("*** mtp | error: registering rs: %s with "
-                        " this server | create_and_register_rs ****\n", ip);
+                if(can_debug(create_and_register_rs))
+                        pr_info(" *** mtp | error: registering rs: %s with"
+                                " this server | create_and_register_rs ****\n",
+                                ip);
 
                 goto fail;
         }
@@ -549,9 +645,10 @@ struct remote_server *create_and_register_rs(char *ip, int port)
 
         if(err < 0)
         {
-              pr_info("*** mtp | error: %d connecting "
-                      "this server to rs:%s |"
-                      " create_and_register_rs ***\n", err, ip);
+                if(can_debug(create_and_register_rs))
+                        pr_info(" *** mtp | error: %d connecting"
+                                " this server to rs:%s |"
+                                " create_and_register_rs ***\n", err, ip);
 
               down_write(&rs_rwmutex);
               //write_lock(&rs_rwspinlock);
@@ -618,17 +715,34 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
 
       if(IS_ERR(bflt))
       {
-              pr_info("server[%d] failed to allocate memory for bflt of "
-                      "rs: %s | receive_bflt ***\n", conn->thread_id, ip);
-              kfree(ip);
-              goto rcvfail; 
+              if(can_debug(receive_bflt))
+                      pr_info("server[%d] failed to allocate memory for bflt "
+                              "of rs: %s | receive_bflt ***\n", 
+                              conn->thread_id, ip);
+              goto bflt_alloc_fail; 
       }
 
+      if(bloom_filter_add_hash_alg(bflt,"crc32c"))
+      {
+              pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                      "failed | ktb_main_init *** \n");
+              goto bflt_alg_fail;
+      }
+
+      if(bloom_filter_add_hash_alg(bflt,"sha1"))
+      {
+              pr_info(" *** mtp | Adding sha1 algo to bloom filter"
+                      " failed | ktb_main_init *** \n");
+              goto bflt_alg_fail;
+      }
+      
       memset(out_buf, 0, len+1);
       strcat(out_buf, "SEND:BFLT");
        
-      pr_info(" *** mtp | server[%d] sending response: %s for bflt of rs: %s |"
-              " receive_bflt ***\n", conn->thread_id, out_buf, ip);
+      if(can_show(receive_bflt))
+              pr_info(" *** mtp | server[%d] sending response: %s for bflt of "
+                      "rs: %s | receive_bflt ***\n", 
+                      conn->thread_id, out_buf, ip);
         
       ret =
       tcp_server_send(conn->accept_socket,(void *)out_buf,strlen(out_buf),\
@@ -639,15 +753,13 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
       tcp_server_receive(conn->accept_socket, (void *)bflt->bitmap,\
                          bmap_byte_size, MSG_DONTWAIT, 1);
 
-      pr_info(" *** mtp | server[%d] received bitmap (size: %d) of rs: [%s] | "
-              "receive_bflt ***\n", conn->thread_id, ret, ip);
+      if(can_show(receive_bflt))
+              pr_info(" *** mtp | server[%d] received bitmap (size: %d) of "
+                      "rs: [%s] | receive_bflt ***\n",
+                      conn->thread_id, ret, ip);
 
       if(ret != bmap_byte_size)
-      {
-              kfree(ip);
-              vfree(bflt);
-              goto rcvfail;
-      }
+              goto bflt_rcv_fail;
 
       rs = look_up_rs(ip, port);
               
@@ -657,14 +769,17 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
 
               if(rs == NULL)
               {
-                      pr_info(" *** mtp | server[%d] create_and_register_rs for"
-                              " rs: %s failed | receive_bflt ***\n",
-                              conn->thread_id, ip);
+                      if(can_debug(receive_bflt))
+                              pr_info(" *** mtp | server[%d]"
+                                      " create_and_register_rs for"
+                                      " rs: %s failed | receive_bflt ***\n",
+                                      conn->thread_id, ip);
 
-                      //vfree(bitmap);
-                      goto rcvfail;
+                      goto bflt_rcv_fail;
               }
       }
+      else
+              kfree(ip);
 
       /*free the bitmap for an existing server*/
       down_write(&rs_rwmutex);
@@ -674,19 +789,30 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
       rs->rs_bflt = bflt;
       up_write(&rs_rwmutex);
 
-      pr_info(" *** mtp | server[%d] testing received bitmap of rs: [%s]\n"
-              "bitmap[0]: %d, bitmap[10]: %d |\n receive_bflt ***\n", 
-              conn->thread_id, ip, test_bit(0, rs->rs_bflt->bitmap),
-              test_bit(0, rs->rs_bflt->bitmap));
+      /*
+      if(can_show(receive_bflt))
+              pr_info(" *** mtp | server[%d] testing received bitmap of"
+                      " rs: [%s]\n bitmap[0]: %d, bitmap[10]: %d |\n"
+                      " receive_bflt ***\n", conn->thread_id, ip, 
+                      test_bit(0, rs->rs_bflt->bitmap), 
+                      test_bit(0, rs->rs_bflt->bitmap));
 
       //bmap_bits_size = bmap_byte_size << 3;
       for(i = 0; i < bmap_bits_size; i++)
               if(test_bit(i, rs->rs_bflt->bitmap))
                       pr_info("%d bit is set\n", i);
+       */
 
       return 0;
 
-rcvfail:
+bflt_rcv_fail:
+bflt_alg_fail:
+
+      vfree(bflt);
+
+bflt_alloc_fail:
+
+      kfree(ip);
 
       return -1;
 }
@@ -722,14 +848,17 @@ int connection_handler(void *data)
 
                       if(kthread_should_stop())
                       {
-                              pr_info(" *** mtp | tcp server handle connection "
-                                "thread stopped | connection_handler *** \n");
+                              if(can_show(connection_handler))
+                                      pr_info(" *** mtp | tcp server handle"
+                                              " connection thread stopping"
+                                              " | connection_handler *** \n");
 
-                              tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
+                              //tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
 
                               __set_current_state(TASK_RUNNING);
                               remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
                                                 &recv_wait);
+                              tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
                               kfree(tcp_conn_handler->data[id]->address);
                               kfree(tcp_conn_handler->data[id]->ip);
                               kfree(tcp_conn_handler->data[id]);
@@ -750,8 +879,9 @@ int connection_handler(void *data)
               __set_current_state(TASK_RUNNING);
               remove_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);
 
-              pr_info(" *** mtp | server[%d] receiving message | "
-                      "connection_handler ***\n", id);
+              if(can_show(connection_handler))
+                      pr_info(" *** mtp | server[%d] receiving message | "
+                              "connection_handler ***\n", id);
 
               memset(in_buf, 0, len+1);
               //ret = tcp_server_receive(accept_socket, id, address, in_buf, len,
@@ -759,9 +889,10 @@ int connection_handler(void *data)
               ret = tcp_server_receive(accept_socket, (void *)in_buf, len,\
                                        MSG_DONTWAIT, 0);
 
-              pr_info(" *** mtp | server[%d] received: %d bytes from %s:%d, "
-                      "says: %s | connection_handler ***\n",
-                      id, ret, ip, port, in_buf);
+              if(can_show(connection_handler))
+                      pr_info(" *** mtp | server[%d] received: %d bytes from"
+                              " %s:%d, says: %s | connection_handler ***\n",
+                              id, ret, ip, port, in_buf);
 
               if(ret > 0)
               {
@@ -783,17 +914,27 @@ bfltfail:
                                       memset(out_buf, 0, len+1);
                                       strcat(out_buf, "FAIL:BFLT");
 bfltresp:
-                                      pr_info(" *** mtp | sending response: %s |"
-                                              " connection_handler ***\n",
-                                              out_buf);
+                                      if(can_show(connection_handler))
+                                              pr_info(" *** mtp | sending"
+                                                      " response: %s |"
+                                                      " connection_handler"
+                                                      " ***\n",
+                                                      out_buf);
 
                                       tcp_server_send(accept_socket, out_buf,\
                                                       strlen(out_buf),\
                                                       MSG_DONTWAIT);
 
-                                      pr_info(" *** mtp | sending test page |"
-                                              " connection_handler ***\n");
+                                      if(can_show(connection_handler))
+                                           pr_info(" *** mtp | sending test"
+                                                   " page | "
+                                                   "connection_handler *** \n");
 
+                                      if(memcmp(out_buf, "DONE:BFLT", 9) == 0)
+                                      {
+                                              if(check_remote_sharing_op() < 0)
+                                                      break;
+                                      }
                                       /*
                                       if(test_page != NULL)
                                               snd_page(test_page);
@@ -832,10 +973,16 @@ pageresp:
                       else if(memcmp(in_buf, "ADIOS", 5) == 0)
                       {
                               int r = 1;
+
                               memset(out_buf, 0, len+1);
+
                               strcat(out_buf, "ADIOSAMIGO");
-                              pr_info(" *** mtp | sending response: %s"
-                                      " | connection_handler ***\n", out_buf);
+
+                              if(can_show(connection_handler))
+                                      pr_info(" *** mtp | sending response: %s"
+                                              " | connection_handler ***\n",
+                                              out_buf);
+
                               tcp_server_send(accept_socket, out_buf,\
                                               strlen(out_buf), MSG_DONTWAIT);
                               /* here also the local client connection 
@@ -853,12 +1000,24 @@ pageresp:
                                               if(!r)
                                               {
                                                       if(fwd_bflt_thread != NULL)
-                                                              put_task_struct(fwd_bflt_thread);
+                                                              put_task_struct(\
+                                                              fwd_bflt_thread);
 
-                                                      timed_fwd_filter_stopped = 1;
+                                                     timed_fwd_filter_stopped=1;
 
-                                                      pr_info(" *** mtp | timed forward filter thread"
-                                                              " stopped | connection_handler *** \n");
+                                                     if(\
+                                                     can_show(connection_handler))
+                                                     {
+                                                             pr_info(" *** mtp"
+                                                                     " | timed"
+                                                                     " forward"
+                                                                     " filter"
+                                                                     " thread"
+                                                                     " stopped |"
+                                                                     "connection_"
+                                                                     " handler"
+                                                                     " *** \n");
+                                                     }
                                               }
                                       }
                               }
@@ -866,9 +1025,11 @@ pageresp:
 
                               if(cli_conn_socket)
                               {
-                                      pr_info(" *** mtp | 1. Closing client "
-                                              "connection | connection_handler "
-                                              "*** \n");
+                                      if(can_show(connection_handler))
+                                              pr_info(" *** mtp | 1. Closing"
+                                                      " client connection |"
+                                                      " connection_handler"
+                                                      " *** \n");
                                       tcp_client_exit();
                               }
                               
@@ -883,7 +1044,7 @@ out:
        kfree(tcp_conn_handler->data[id]);
        //kfree(tmp);
        sock_release(tcp_conn_handler->data[id]->accept_socket);
-       tcp_conn_handler->thread[id] = NULL;
+       //tcp_conn_handler->thread[id] = NULL;
        do_exit(0);
 }
 
@@ -900,8 +1061,10 @@ int tcp_server_accept(void)
 
         tcp_acceptor_started = 1;
         socket = tcp_server->listen_socket;
-        pr_info(" *** mtp | creating the accept socket | tcp_server_accept "
-                "*** \n");
+
+        if(can_show(tcp_server_accept))
+                pr_info(" *** mtp | creating the accept socket |"
+                        " tcp_server_accept *** \n");
 
         while(1)
         {
@@ -917,9 +1080,11 @@ int tcp_server_accept(void)
 
                 if(accept_err < 0 || !accept_socket)
                 {
-                        pr_info(" *** mtp | accept_error: %d while creating "
-                                "tcp server accept socket | "
-                                "tcp_server_accept *** \n", accept_err);
+                        if(can_show(tcp_server_accept))
+                                pr_info(" *** mtp | accept_error: %d while"
+                                        " creating tcp server accept socket | "
+                                        " tcp_server_accept *** \n",
+                                        accept_err);
                         goto err;
                 }
 
@@ -940,8 +1105,11 @@ int tcp_server_accept(void)
 
                        if(kthread_should_stop())
                        {
-                               pr_info(" *** mtp | 1.tcp server acceptor thread"
-                                       " stopped | tcp_server_accept *** \n");
+                               if(can_show(tcp_server_accept))
+                                       pr_info(" *** mtp | 1.tcp server"
+                                               " acceptor thread stopped |"
+                                               " tcp_server_accept *** \n");
+
                                tcp_acceptor_stopped = 1;
                                __set_current_state(TASK_RUNNING);
                                remove_wait_queue(&socket->sk->sk_wq->wait,\
@@ -962,16 +1130,20 @@ int tcp_server_accept(void)
                __set_current_state(TASK_RUNNING);
                remove_wait_queue(&socket->sk->sk_wq->wait, &accept_wait);
 
-               pr_info(" *** mtp | accept connection | tcp_server_accept ***\n");
+
+               if(can_show(tcp_server_accept))
+                       pr_info(" *** mtp | accept connection |"
+                               " tcp_server_accept ***\n");
 
                accept_err = 
                socket->ops->accept(socket, accept_socket, O_NONBLOCK);
 
                if(accept_err < 0)
                {
-                       pr_info(" *** mtp | accept_error: %d while accepting "
-                               "tcp server | tcp_server_accept *** \n",
-                               accept_err);
+                       if(can_show(tcp_server_accept))
+                               pr_info(" *** mtp | accept_error: %d while"
+                                       " accepting tcp server |"
+                                       " tcp_server_accept *** \n", accept_err);
                        goto release;
                }
 
@@ -987,20 +1159,23 @@ int tcp_server_accept(void)
 
                if(accept_err < 0)
                {
-                       pr_info(" *** mtp | accept_error: %d in getname "
-                               "tcp server | tcp_server_accept *** \n",
-                               accept_err);
+                       if(can_debug(tcp_server_accept))
+                               pr_info(" *** mtp | accept_error: %d in getname"
+                                       " tcp server | tcp_server_accept *** \n",
+                                       accept_err);
                        goto release;
                }
 
                sip = inet_ntoa(&(client->sin_addr));
                sport = ntohs(client->sin_port);
 
-               pr_info("connection from: %s %d \n", sip, sport);
+               if(can_show(tcp_server_accept))
+                       pr_info("connection from: %s %d \n", sip, sport);
 
                //kfree(tmp);
-
-               pr_info("handle connection\n");
+  
+               if(can_show(tcp_server_accept))
+                       pr_info("handle connection\n");
 
                /*should I protect this against concurrent access?*/
                for(id = 0; id < MAX_CONNS; id++)
@@ -1009,7 +1184,8 @@ int tcp_server_accept(void)
                                 break;
                }
 
-               pr_info("gave free id: %d\n", id);
+               if(can_show(tcp_server_accept))
+                       pr_info("gave free id: %d\n", id);
 
                if(id == MAX_CONNS)
                        goto release;
@@ -1033,8 +1209,10 @@ int tcp_server_accept(void)
 
                if(kthread_should_stop())
                {
-                       pr_info(" *** mtp | 2. tcp server acceptor thread stopped"
-                               " | tcp_server_accept *** \n");
+                       if(can_show(tcp_server_accept))
+                               pr_info(" *** mtp | 2. tcp server acceptor"
+                                       " thread stopped | tcp_server_accept"
+                                       " *** \n");
                        tcp_acceptor_stopped = 1;
                        //sock_release(accept_socket);
                        return 0;
@@ -1070,8 +1248,10 @@ int tcp_server_listen(void)
                                  &tcp_server->listen_socket);
         if(server_err < 0)
         {
-                pr_info(" *** mtp | Error: %d while creating tcp server "
-                        "listen socket | tcp_server_listen *** \n", server_err);
+                if(can_debug(tcp_server_listen))
+                        pr_info(" *** mtp | Error: %d while creating tcp"
+                                " server listen socket | tcp_server_listen"
+                                " *** \n", server_err);
                 goto err;
         }
 
@@ -1087,8 +1267,10 @@ int tcp_server_listen(void)
                                sizeof(server));
 
         if(server_err < 0) {
-                pr_info(" *** mtp | Error: %d while binding tcp server "
-                        "listen socket | tcp_server_listen *** \n", server_err);
+                if(can_debug(tcp_server_listen))
+                        pr_info(" *** mtp | Error: %d while binding tcp server"
+                                " listen socket | tcp_server_listen *** \n",
+                                server_err);
                 goto release;
         }
 
@@ -1096,10 +1278,11 @@ int tcp_server_listen(void)
 
         if(server_err < 0)
         {
-                pr_info(" *** mtp | Error: %d while listening in tcp "
-                        "server listen socket | tcp_server_listen "
-                        "*** \n", server_err);
-                        goto release;
+                if(can_debug(tcp_server_listen))
+                        pr_info(" *** mtp | Error: %d while listening in tcp "
+                                "server listen socket | tcp_server_listen "
+                                "*** \n", server_err);
+                goto release;
         }
 
         tcp_server->accept_thread = 
@@ -1111,8 +1294,9 @@ int tcp_server_listen(void)
 
                 if(kthread_should_stop())
                 {
-                        pr_info(" *** mtp | tcp server listening thread"
-                                " stopped | tcp_server_listen *** \n");
+                        if(can_show(tcp_server_listen))
+                                pr_info(" *** mtp | tcp server listening thread"
+                                        " stopped | tcp_server_listen *** \n");
                         tcp_listener_stopped = 1;
                         return 0;
                 }
@@ -1161,9 +1345,16 @@ int timed_fwd_filter(void* data)
                 */
                 jleft = schedule_timeout(delay*HZ);
 
-                pr_info(" *** mtp | Bloom filter transfer timer expired! "
-                        "TIMER VALUE: %lu secs | timed_fwd_filter *** \n", 
-                        (jleft/HZ));
+                if(can_show(timed_fwd_filter))
+                        pr_info("*** mtp | Bloom filter transfer timer expired!"
+                                " TIMER VALUE: %lu secs | timed_fwd_filter"
+                                " *** \n", (jleft/HZ));
+
+                /*for now reset these counters*/
+                tmem_remote_dedups = 0;
+                succ_tmem_remote_dedups = 0;
+                failed_tmem_remote_dedups = 0;
+                
                 /*
                 if(kthread_should_stop())
                 {
@@ -1191,8 +1382,10 @@ int timed_fwd_filter(void* data)
 
                 if(tcp_client_fwd_filter(bflt) < 0)
                 {
-                        pr_info(" *** mtp | tcp_client_fwd_filter 2 attmepts "
-                                "failed | timed_fwd_filter *** \n");
+                        if(can_show(timed_fwd_filter))
+                                pr_info(" *** mtp | tcp_client_fwd_filter 2"
+                                        " attmepts failed |"
+                                        " timed_fwd_filter *** \n");
                 }
 
                 //check_remote_sharing_op();
@@ -1269,6 +1462,7 @@ int network_server_init(void)
         pr_info(" *** mtp | initiating network_server | "
                 "network_server_init ***\n");
 
+        /*
         test_page = alloc_page(GFP_ATOMIC);
 
         if(test_page != NULL)
@@ -1280,6 +1474,7 @@ int network_server_init(void)
                 strcat(test_page_vaddr, 
                        "HOLA AMIGO, MI LLAMA ABY, Y TU?");
         }
+        */
 
         tcp_server = kmalloc(sizeof(struct tcp_server_service), GFP_KERNEL);
         memset(tcp_server, 0, sizeof(struct tcp_server_service));
@@ -1382,6 +1577,59 @@ int network_server_init(void)
                         "network_server_init ***\n");
         */
 
+        /*
+        show_msg(tcp_server_send);
+        show_msg(tcp_server_receive);
+        show_msg(register_rs);
+        show_msg(deregister_rs); 
+        show_msg(look_up_rs); 
+        show_msg(drop_connection); 
+        show_msg(create_and_register_rs); 
+        show_msg(connection_handler); 
+        show_msg(tcp_server_accept); 
+        show_msg(tcp_server_listen); 
+        show_msg(tcp_server_start); 
+        show_msg(receive_bflt); 
+        */
+
+        show_msg(compare_page);
+        show_msg(timed_fwd_filter); 
+
+        debug(compare_page);
+        debug(timed_fwd_filter); 
+        /*
+        show_msg(rcv_and_cmp_page);
+        show_msg(tcp_client_send);
+        show_msg(tcp_client_receive); 
+        show_msg(tcp_client_connect_rs); 
+        show_msg(tcp_client_connect); 
+        show_msg(tcp_client_snd_page); 
+        show_msg(tcp_client_fwd_filter); 
+
+        debug(tcp_server_send);
+        debug(tcp_server_receive);
+        debug(rcv_and_cmp_page);
+        debug(register_rs);
+        debug(deregister_rs); 
+        debug(look_up_rs); 
+        debug(drop_connection); 
+        debug(create_and_register_rs); 
+        debug(receive_bflt); 
+        debug(connection_handler); 
+        debug(tcp_server_accept); 
+        debug(tcp_server_listen); 
+        debug(tcp_server_start); 
+        */
+
+        /*
+        debug(tcp_client_send);
+        debug(tcp_client_receive); 
+        debug(tcp_client_snd_page); 
+        debug(tcp_client_fwd_filter); 
+        debug(tcp_client_connect_rs); 
+        debug(tcp_client_connect); 
+        */
+
         return 0;
 }
 
@@ -1391,78 +1639,91 @@ void network_server_exit(void)
         int ret;
         int id;
 
-        if(tcp_server->thread == NULL)
-                pr_info(" *** mtp | No kernel thread to kill | "
-                        "network_server_exit *** \n");
-        else
+        if(tcp_server == NULL)
         {
-                for(id = 0; id < MAX_CONNS; id++)
-                {
-                        if(tcp_conn_handler->thread[id] != NULL)
-                        {
-                                if(pid_alive(tcp_conn_handler->thread[id]))
-                                        pr_info(" *** mtp | connection handler "
-                                                "thread id: %d is not stale and "
-                                                "safe to kill | "
-                                                "network_server_exit *** \n", id);
-                                else
-                                        continue;
+                pr_info(" *** mtp | No network server running |"
+                        " network_server_exit *** \n");
 
-                        if(!tcp_conn_handler->tcp_conn_handler_stopped[id])
-                                {
-                                        pr_info(" *** mtp | calling kthread_stop "
-                                                "on connection hanlder thread: %d"
-                                                " | network_server_exit *** \n", id);
-                                      ret = 
-                                      kthread_stop(tcp_conn_handler->thread[id]);
-
-                                        if(!ret)
-                                                pr_info(" *** mtp | tcp server "
-                                                        "connection handler "
-                                                        "thread: %d stopped | "
-                                                        "network_server_exit "
-                                                        "*** \n", id);
-                                        
-                                        if(tcp_conn_handler->thread[id] != NULL)
-                                                put_task_struct(tcp_conn_handler->thread[id]);
-                                }
-                       }
-                }
-
-                if(tcp_acceptor_started && !tcp_acceptor_stopped)
-                {
-                        ret = kthread_stop(tcp_server->accept_thread);
-                        if(!ret)
-                                pr_info(" *** mtp | tcp server acceptor thread"
-                                        " stopped | network_server_exit *** \n");
-                }
-
-                if(tcp_listener_started && !tcp_listener_stopped)
-                {
-                        ret = kthread_stop(tcp_server->thread);
-                        if(!ret)
-                                pr_info(" *** mtp | tcp server listening thread"
-                                        " stopped | network_server_exit *** \n");
-
-                        if(tcp_server->listen_socket != NULL)
-                        {
-                                sock_release(tcp_server->listen_socket);
-                                tcp_server->listen_socket = NULL;
-                        }
-
-                }
-
-                kfree(tcp_conn_handler);
-                kfree(tcp_server);
-                tcp_server = NULL;
-                if(cli_conn_socket)
-                {
-                        pr_info(" *** mtp | 2. Closing client connection | "
-                                "network_server_exit ***\n");
-                        tcp_client_exit();
-                }
+                goto exit_net_server;
         }
 
+        if(tcp_server->thread == NULL)
+        {
+                pr_info(" *** mtp | No kernel thread to kill | "
+                        "network_server_exit *** \n");
+
+                goto exit_net_server;
+        }
+
+        for(id = 0; id < MAX_CONNS; id++)
+        {
+                if(tcp_conn_handler->thread[id] != NULL)
+                {
+                        if(pid_alive(tcp_conn_handler->thread[id]))
+                                pr_info(" *** mtp | connection handler "
+                                        "thread id: %d is not stale and "
+                                        "safe to kill | "
+                                        "network_server_exit *** \n", id);
+                        else
+                                continue;
+
+                        if(!tcp_conn_handler->tcp_conn_handler_stopped[id])
+                        {
+                                pr_info(" *** mtp | calling kthread_stop "
+                                        "on connection hanlder thread: %d"
+                                        " | network_server_exit *** \n", id);
+                              ret = 
+                              kthread_stop(tcp_conn_handler->thread[id]);
+
+                                if(!ret)
+                                        pr_info(" *** mtp | tcp server "
+                                                "connection handler "
+                                                "thread: %d stopped | "
+                                                "network_server_exit "
+                                                "*** \n", id);
+                                
+                                if(tcp_conn_handler->thread[id] != NULL)
+                                        put_task_struct(\
+                                        tcp_conn_handler->thread[id]);
+                        }
+               }
+        }
+
+        if(tcp_acceptor_started && !tcp_acceptor_stopped)
+        {
+                ret = kthread_stop(tcp_server->accept_thread);
+                if(!ret)
+                        pr_info(" *** mtp | tcp server acceptor thread"
+                                " stopped | network_server_exit *** \n");
+        }
+
+        if(tcp_listener_started && !tcp_listener_stopped)
+        {
+                ret = kthread_stop(tcp_server->thread);
+                if(!ret)
+                        pr_info(" *** mtp | tcp server listening thread"
+                                " stopped | network_server_exit *** \n");
+
+                if(tcp_server->listen_socket != NULL)
+                {
+                        sock_release(tcp_server->listen_socket);
+                        tcp_server->listen_socket = NULL;
+                }
+
+        }
+
+        kfree(tcp_conn_handler);
+        kfree(tcp_server);
+        tcp_server = NULL;
+
+        if(cli_conn_socket)
+        {
+                pr_info(" *** mtp | 2. Closing client connection | "
+                        "network_server_exit ***\n");
+                tcp_client_exit();
+        }
+
+exit_net_server:
         deregister_rs();
         pr_info(" *** mtp | network server module unloaded | "
                 "network_server_exit *** \n");

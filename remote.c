@@ -21,7 +21,7 @@ void update_summary(struct tmem_page_descriptor* pgp)
         unsigned long int count1 = 0;
         unsigned long int count2 = 0;
 
-        pr_info(" *** mtp | Inside update_summary | *** \n");
+        //pr_info(" *** mtp | Inside update_summary | *** \n");
 
         if(can_show(update_summary))
         {
@@ -72,7 +72,7 @@ void update_summary(struct tmem_page_descriptor* pgp)
                 read_unlock(&(tmem_system.system_list_rwlock));
                 //spin_unlock(&(tmem_system.system_list_lock));
         }
-        
+
         pcd = pgp->pcd;
 
         if(can_show(update_summary))

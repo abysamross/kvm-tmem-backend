@@ -33,6 +33,9 @@ struct kmem_cache* tmem_page_descriptors_cachep;
 struct kmem_cache* tmem_page_content_desc_cachep;
 struct kmem_cache* tmem_objects_cachep;
 struct kmem_cache* tmem_object_nodes_cachep;
+struct page *test_page;
+struct tmem_page_content_descriptor *test_pcd;
+void *test_page_vaddr;
 /*
 struct rb_root pcd_tree_roots[256]; 
 rwlock_t pcd_tree_rwlocks[256]; 
@@ -56,6 +59,7 @@ int debug_ktb_get_page = 0;
 int debug_ktb_flush_page = 0;
 int debug_ktb_flush_object = 0;
 int debug_pcd_associate = 0;
+int debug_pcd_remote_associate = 0;
 int debug_pcd_disassociate = 0;
 int debug_ktb_destroy_client = 0;
 int debug_tmem_pool_destroy_objs = 0;
@@ -76,6 +80,7 @@ int show_msg_ktb_get_page = 0;
 int show_msg_ktb_flush_page = 0;
 int show_msg_ktb_flush_object = 0;
 int show_msg_pcd_associate = 0;
+int show_msg_pcd_remote_associate = 0;
 int show_msg_pcd_disassociate = 0;
 int show_msg_ktb_destroy_client = 0;
 int show_msg_tmem_pool_destroy_objs = 0;
@@ -108,6 +113,10 @@ u64 tmem_dedups;
 u64 succ_tmem_dedups;
 u64 failed_tmem_dedups;
 
+u64 tmem_remote_dedups;
+u64 succ_tmem_remote_dedups;
+u64 failed_tmem_remote_dedups;
+
 u64 tmem_invalidates;
 u64 succ_tmem_invalidates;
 u64 failed_tmem_invalidates;
@@ -123,11 +132,13 @@ u64 failed_tmem_page_invalidates;
 /*                                                     End Debugfs files/vars */
 /******************************************************************************/ 
 //static void check_remote_sharing_op(unsigned long data)
-void check_remote_sharing_op(void)
+int  check_remote_sharing_op(void)
 {
         struct tmem_page_content_descriptor *pcd;
         uint8_t byte;
         bool bloom_res;
+        int succ_count = 0;
+        int count = 0;
         /* 
          * every time our bloom filter is send across, for each pcd in rscl we
          * explore the option of remote deduplication without bothering about
@@ -173,6 +184,7 @@ void check_remote_sharing_op(void)
                         struct page *pg = alloc_page(GFP_ATOMIC);
                         void *vaddr1, *vaddr2;
 
+                        count++;
                         byte = tmem_get_first_byte(pcd->system_page);
                         vaddr1 = page_address(pg);
                         memset(vaddr1, 0, PAGE_SIZE);
@@ -217,7 +229,18 @@ void check_remote_sharing_op(void)
                                                                 "page was not "
                                                                 "found with RS "
                                                                 ": %s | "
-                                                                "snd_page *** "
+                                                                "check_remote_"
+                                                                "sharing_op ***"
+                                                                "\n",rs->rs_ip);
+                                                }
+                                                else
+                                                {
+                                                        succ_count++;
+                                                        pr_info(" *** mtp | "
+                                                                "page was found"
+                                                                " with RS: %s |"
+                                                                " check_remote_"
+                                                                "sharing_op ***"
                                                                 "\n",rs->rs_ip);
                                                 }
                                         }
@@ -229,10 +252,20 @@ void check_remote_sharing_op(void)
                         //read_unlock(&rs_rwspinlock);
                         __free_page(pg);
 
+                        pr_info(" *** mtp | # remote lookups: %d|"
+                                " check_remote_sharing_op *** \n", count);
+                        pr_info(" *** mtp | remote lookups succeeded: %d|"
+                                " check_remote_sharing_op *** \n", succ_count);
+
+                        if(kthread_should_stop())
+                                return -1;
+
                         read_lock(&(tmem_system.system_list_rwlock));
                 }
         }
         read_unlock(&(tmem_system.system_list_rwlock));
+
+        return 0;
 }
 /******************************************************************************/
 /*			                          bloom filter transfer thread*/
@@ -1560,14 +1593,18 @@ static int __init ktb_main_init(void)
 {
 	int i;
 	char *s = "kvm_tmem_bknd";
-        //struct dentry *root = NULL;
+        /*
+        uint8_t byte;
+        bool bloom_res;
+        */
 
 	pr_info(" *** mtp | INSERTED ********kvm_tmem_bknd******** INSERTED | "
 		"ktb_main_init *** \n");
-	//BUG_ON(sizeof(struct cleancache_filekey) != sizeof(struct tmem_oid));
-	//pr_info(" *** MODULE | CURRENT ******** pid: %d, name: %s ******** "
-	//	  " INSERTED | MODULE *** \n", current->pid, current->comm);
-
+        /*
+	BUG_ON(sizeof(struct cleancache_filekey) != sizeof(struct tmem_oid));
+	pr_info(" *** MODULE | CURRENT ******** pid: %d, name: %s ******** "
+		  " INSERTED | MODULE *** \n", current->pid, current->comm);
+        */
 	pr_info(" *** mtp | kvm_tmem_bknd_enabled: %d, use_cleancache: %d | "
 		"ktb_main_init *** \n", kvm_tmem_bknd_enabled, use_cleancache);
 
@@ -1593,29 +1630,34 @@ static int __init ktb_main_init(void)
 
                         tmem_system_bloom_filter = NULL;
                         //set error flag
-                        goto bfltfail;
+                        //goto init_bflt_fail;
                 }
                 else
                         pr_info(" *** mtp | successfully allocated bloom_filter"
-                                        " | ktb_main_init *** \n");
+                                " | ktb_main_init *** \n");
 
-                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
-                                        "crc32c"))
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,"crc32c"))
+                {
                         pr_info(" *** mtp | Adding crc32c algo to bloom filter"
                                 "failed | ktb_main_init *** \n");
 
-                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,\
-                                        "sha1"))
-                        pr_info(" *** mtp | Adding crc32c algo to bloom filter"
+                        vfree(tmem_system_bloom_filter);
+                        tmem_system_bloom_filter = NULL;
+                        //goto init_bflt_alg_fail;
+                }
+
+                if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,"sha1"))
+                {
+                        pr_info(" *** mtp | Adding sha1 algo to bloom filter"
                                 "failed | ktb_main_init *** \n");
 
-                bloom_filter_reset(tmem_system_bloom_filter);
+                        vfree(tmem_system_bloom_filter);
+                        tmem_system_bloom_filter = NULL;
+                        //goto init_bflt_alg_fail;
+                }
 
-                /* register the tmem backend ops */
-		kvm_host_tmem_register_ops(&ktb_ops);
-
-		pr_info(" *** mtp | Cleancache enabled using: %s | "
-				"ktb_main_init *** \n", s);
+                if(tmem_system_bloom_filter != NULL)
+                        bloom_filter_reset(tmem_system_bloom_filter);
 
 		tmem_objects_cachep =
 			kmem_cache_create("ktb_tmem_objects",\
@@ -1629,13 +1671,6 @@ static int __init ktb_main_init(void)
 			kmem_cache_create("ktb_page_content_descriptors",\
 			sizeof(struct tmem_page_content_descriptor), 0, 0, NULL);
 
-		//tmem_object_nodes_cachep =
-		//kmem_cache_create("ktb_object_nodes",
-		//sizeof(struct tmem_object_node), 0, 0, NULL);
-
-		//ktb_new_client(TMEM_CLIENT);
-		/*
-		*/
 		if(kvm_tmem_dedup_enabled)
 		{
 			for(i = 0; i < 256; i++)
@@ -1644,74 +1679,148 @@ static int __init ktb_main_init(void)
 				rwlock_init(&(tmem_system.pcd_tree_rwlocks[i]));
 			}
 
-                INIT_LIST_HEAD(&(tmem_system.remote_sharing_candidate_list));
+                        INIT_LIST_HEAD(\
+                        &(tmem_system.remote_sharing_candidate_list));
                         INIT_LIST_HEAD(&(tmem_system.local_only_list));
                         rwlock_init(&(tmem_system.system_list_rwlock));
                         //spin_lock_init(&(tmem_system.system_list_lock));
 		}
 
-                //start the tcp server
-                if(network_server_init() != 0)
-                {
-                        pr_info(" *** mtp | failed to start the tcp server "
-                                "| ktb_main_init *** \n");
-                        vfree(tmem_system_bloom_filter);
-                        //set error flag
-                        //goto netfail;
-                }
                 /*
-                register the tcp server with the designated leader,
-                who is hard coded for now.
-                */
-                else if(tcp_client_init() != 0)
+                 * test code to check the working of remote deduplication
+                 * without starting any VMs.
+                test_pcd = 
+                kmem_cache_alloc(tmem_page_content_desc_cachep, GFP_ATOMIC);
+
+                test_page = alloc_page(GFP_ATOMIC);
+
+                if(test_page != NULL)
                 {
-                        int ret;
-
-                        pr_info(" *** mtp | failed to register with the leader "
-                                "server | ktb_main_init *** \n");
-                        
-                        if(tcp_acceptor_started && !tcp_acceptor_stopped)
-                        {
-                                ret = kthread_stop(tcp_server->accept_thread);
-                                if(!ret)
-                                        pr_info(" *** mtp | stopping tcp server"
-                                                " accept thread as local client"
-                                                " could not setup a connection"
-                                                " with leader server |"
-                                                " network_server_init *** \n");
-                        }
-
-                        if(tcp_listener_started && !tcp_listener_stopped)
-                        {
-                                ret = kthread_stop(tcp_server->thread);
-                                if(!ret)
-                                        pr_info(" *** mtp | stopping tcp server"
-                                                " listening thread as local"
-                                                " client could not setup a"
-                                                " connection with leader server"
-                                                " | network_server_init *** \n");
-
-                                if(tcp_server->listen_socket != NULL)
-                                {
-                                        sock_release(tcp_server->listen_socket);
-                                        tcp_server->listen_socket = NULL;
-                                }
-                        }
-                        
-
-                        kfree(tcp_conn_handler);
-                        kfree(tcp_server);
-                        vfree(tmem_system_bloom_filter);
-                        //vfree(bflt);
-                        //goto netfail;
-
+                        pr_info(" *** mtp | test_page allocated successfully | "
+                                "network_server_init *** \n");
+                        test_page_vaddr = page_address(test_page);
+                        memset(test_page_vaddr, 0, PAGE_SIZE);
+                        strcat(test_page_vaddr, 
+                               "HOLA AMIGO, MI LLAMA ABY, Y TU?");
                 }
-                else if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+
+                RB_CLEAR_NODE(&test_pcd->pcd_rb_tree_node);
+                INIT_LIST_HEAD(&test_pcd->system_rscl_pcds);
+                INIT_LIST_HEAD(&test_pcd->system_lol_pcds);
+                
+                test_pcd->pgp = NULL;
+                test_pcd->system_page = test_page;
+                test_pcd->size = PAGE_SIZE;
+                test_pcd->pgp_ref_count = 0;
+
+                write_lock(&(tmem_system.system_list_rwlock));
+
+                list_add_tail(&(test_pcd->system_rscl_pcds),\
+                        &(tmem_system.remote_sharing_candidate_list));
+
+                write_unlock(&(tmem_system.system_list_rwlock));
+
+
+                byte = tmem_get_first_byte(test_pcd->system_page);
+
+                if(bloom_filter_add(tmem_system_bloom_filter, &byte, 1))
+                        pr_info(" *** mtp | adding test page to bloom filter"
+                                " failed | ktb_main_init *** \n");
+                
+                if(bloom_filter_check(tmem_system_bloom_filter,&byte,1,&bloom_res))
+                        pr_info(" *** mtp | checking for test page to bloom"
+                                "filter failed | ktb_main_init *** \n");
+
+                if(bloom_res == false)
+                        pr_info(" *** mtp | the test page was not set in bloom"
+                                " filter | ktb_main_init *** \n");
+                */
+
+                /* register the tmem backend ops */
+		kvm_host_tmem_register_ops(&ktb_ops);
+
+		pr_info(" *** mtp | Cleancache enabled using: %s | "
+				"ktb_main_init *** \n", s);
+
+
+		//tmem_object_nodes_cachep =
+		//kmem_cache_create("ktb_object_nodes",
+		//sizeof(struct tmem_object_node), 0, 0, NULL);
+
+		//ktb_new_client(TMEM_CLIENT);
+		/*
+		*/
+                //start the tcp server
+                if(tmem_system_bloom_filter != NULL)
                 {
-                        pr_info(" *** mtp | network server unable to start "
-                                "timed_fwd_bflt_thread | ktb_main_init "
-                                "*** \n");
-                        vfree(tmem_system_bloom_filter);
+                        if(network_server_init() != 0)
+                        {
+                                pr_info(" *** mtp | failed to start the tcp"
+                                        " server | ktb_main_init *** \n");
+                                //set error flag
+                                //goto netfail;
+                        }
+                        /*
+                        register the tcp server with the designated leader,
+                        who is hard coded for now.
+                        */
+                        else if(tcp_client_init() != 0)
+                        {
+                                int ret;
+
+                                pr_info(" *** mtp | failed to register with the"
+                                        " leader server | ktb_main_init ***\n");
+                                
+                                if(tcp_acceptor_started && !tcp_acceptor_stopped)
+                                {
+                                        ret = 
+                                        kthread_stop(tcp_server->accept_thread);
+
+                                        if(!ret)
+                                                pr_info(" *** mtp | stopping"
+                                                        " tcp server accept "
+                                                        "thread as local client"
+                                                        " could not setup a"
+                                                        " connection with"
+                                                        " leader server |"
+                                                        " network_server_init"
+                                                        " *** \n");
+                                }
+
+                                if(tcp_listener_started && !tcp_listener_stopped)
+                                {
+                                        ret = kthread_stop(tcp_server->thread);
+                                        if(!ret)
+                                                pr_info(" *** mtp | stopping"
+                                                        " tcp server listening"
+                                                        " thread as local"
+                                                        " client could not"
+                                                        " setup a connection"
+                                                        " with leader server"
+                                                        " | network_server_init"
+                                                        " *** \n");
+
+                                        if(tcp_server->listen_socket != NULL)
+                                        {
+                                                sock_release(\
+                                                tcp_server->listen_socket);
+                                                tcp_server->listen_socket=NULL;
+                                        }
+                                }
+
+                                kfree(tcp_conn_handler);
+                                kfree(tcp_server);
+                                //vfree(tmem_system_bloom_filter);
+                                //vfree(bflt);
+                                //goto netfail;
+                        }
+                        else if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                        {
+                                pr_info(" *** mtp | network server unable to"
+                                        " start timed_fwd_bflt_thread |"
+                                        " ktb_main_init *** \n");
+                                //vfree(tmem_system_bloom_filter);
+                        }
                 }
 	}
 
@@ -1738,6 +1847,13 @@ static int __init ktb_main_init(void)
                                 &succ_tmem_dedups);
                 debugfs_create_u64("dedups_failed", S_IRUGO, root,\
                                 &failed_tmem_dedups);
+
+                debugfs_create_u64("remote_dedups", S_IRUGO, root,\
+                                &tmem_remote_dedups);
+                debugfs_create_u64("remote_dedups_succ", S_IRUGO, root,\
+                                &succ_tmem_remote_dedups);
+                debugfs_create_u64("remote_dedups_failed", S_IRUGO, root,\
+                                &failed_tmem_remote_dedups);
 
                 debugfs_create_u64("invalidates", S_IRUGO, root,\
                                 &tmem_invalidates);
@@ -1806,6 +1922,7 @@ static int __init ktb_main_init(void)
 	debug(custom_radix_tree_destroy);
 	debug(custom_radix_tree_node_destroy);
 	*/
+	debug(pcd_remote_associate);
 	// end en/dis-able tmem.c debug
 
 	//---------------------------
@@ -1842,6 +1959,7 @@ static int __init ktb_main_init(void)
 	//en/dis-able tmem.c output
 	//-------------------------
 	//show_msg(pcd_associate);
+	show_msg(pcd_remote_associate);
 	/*
 	show_msg(pcd_disassociate);
 	show_msg(tmem_pgp_free);
@@ -1862,8 +1980,8 @@ static int __init ktb_main_init(void)
 	//---------------------------
 	//en/dis-able bloom_filter.c output
 	//---------------------------
-        show_msg(bloom_filter_add);
-        show_msg(bloom_filter_check);
+        //show_msg(bloom_filter_add);
+        //show_msg(bloom_filter_check);
 	// end en/dis-able bloom_filter.c output
 	return 0;
 
@@ -1873,9 +1991,14 @@ netfail:
         vfree(tmem_system_bloom_filter);
         */
 
-bfltfail:
+init_bflt_alg_fail:
+
+        vfree(tmem_system_bloom_filter);
+
+init_bflt_fail:
 
         return -1;
+        */
 }
 /******************************************************************************/
 /*						           END KTB MODULE INIT*/
@@ -1888,6 +2011,11 @@ static void __exit ktb_main_exit(void)
 {
         int ret;
         int cli_id;
+        /*
+        struct tmem_page_content_descriptor *pcd = NULL;
+        struct list_head *pos = NULL;
+        struct list_head *pos_next = NULL;
+        */
 
 	ktb_ops.kvm_host_new_pool = NULL;
 	ktb_ops.kvm_host_put_page = NULL;
@@ -1900,12 +2028,33 @@ static void __exit ktb_main_exit(void)
 
 	kvm_host_tmem_deregister_ops();
 
-        for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
+        /* 
+         * remove the remaining pcds from the system_rscl_pcds list before you
+         * destroy the pcds. The pcds from the system_lol_pcds list will be
+         * removed as a part of pcd_disassociate which will be called
+         * eventually as a result of ktb_destroy_client().
+         * This explicit removal is done to avoid race that may occur
+         * between the ktb_destroy_client() down below and
+         * check_remote_sharing_op() from the network_server thread. 
+        write_lock(&(tmem_system.system_list_rwlock));
+
+        //if(!list_empty(&pcd->system_rscl_pcds))
+        if(!list_empty(&(tmem_system.remote_sharing_candidate_list)))
         {
-                ktb_destroy_client(cli_id);
+                list_for_each_safe(pos, pos_next,
+                &(tmem_system.remote_sharing_candidate_list))
+                {
+                        pcd = list_entry(pos,
+                                         struct tmem_page_content_descriptor,
+                                         system_rscl_pcds);
+
+                        list_del_init(&(pcd->system_rscl_pcds));
+                }
         }
 
-        debugfs_remove_recursive(root);
+        write_unlock(&(tmem_system.system_list_rwlock));
+         */
+        
 
         mutex_lock(&timed_ff_mutex);
         if(fwd_bflt_thread != NULL)
@@ -1926,21 +2075,28 @@ static void __exit ktb_main_exit(void)
         }
         mutex_unlock(&timed_ff_mutex);
 
-        if(fwd_bflt_thread != NULL)
+        if(tmem_system_bloom_filter != NULL)
+        {
+                bloom_filter_reset(tmem_system_bloom_filter);
 
-        bloom_filter_reset(tmem_system_bloom_filter);
-
-        if(bloom_filter_unref(tmem_system_bloom_filter))
-                pr_info(" *** mtp | tmem_system_bloom_filter removed "
-                        "successfully | ktb_main_exit \n");
-        else
-                pr_info(" *** mtp | failed to remove tmem_system_bloom_filter "
-                        "| ktb_main_exit \n");
+                if(bloom_filter_unref(tmem_system_bloom_filter))
+                        pr_info(" *** mtp | tmem_system_bloom_filter removed"
+                                " successfully | ktb_main_exit \n");
+                else
+                        pr_info(" *** mtp | failed to remove"
+                                " tmem_system_bloom_filter"
+                                " | ktb_main_exit \n");
+        }
 
         network_server_exit();
 
-	pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED | "
-		"ktb_main_exit *** \n");
+        for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
+                ktb_destroy_client(cli_id);
+
+        debugfs_remove_recursive(root);
+
+	pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED |"
+		" ktb_main_exit *** \n");
 }
 /******************************************************************************/
 /*							   END KTB MODULE EXIT*/
