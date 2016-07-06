@@ -11,6 +11,10 @@ struct bloom_filter {
 	unsigned long		bitmap[0];
 };
 */
+#define debug(f) (debug_##f = 1)
+#define can_debug(f) (debug_##f == 1)
+#define show_msg(f) (show_msg_##f = 1)
+#define can_show(f) (show_msg_##f == 1)
 
 struct remote_server
 {
@@ -64,11 +68,13 @@ extern int  tcp_listener_started;
 extern int timed_fwd_filter_stopped;
 
 extern int timed_fwd_filter(void *);
+extern struct mutex timed_ff_mutex;
 extern struct task_struct *fwd_bflt_thread;
 extern struct list_head rs_head;
-extern rwlock_t rs_rwspinlock;
+//extern rwlock_t rs_rwspinlock;
+extern struct rw_semaphore rs_rwmutex;
 extern struct socket *cli_conn_socket;
-extern void check_remote_sharing_op(void);
+extern int  check_remote_sharing_op(void);
 extern int network_server_init(void);
 extern void network_server_exit(void);
 extern int tcp_client_fwd_filter(struct bloom_filter *);

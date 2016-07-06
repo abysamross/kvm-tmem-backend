@@ -1,4 +1,5 @@
 #include <linux/kernel.h>
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
@@ -16,6 +17,20 @@
 #define PORT 2325
 
 struct socket *cli_conn_socket = NULL;
+
+extern int debug_tcp_client_send;
+extern int debug_tcp_client_receive;
+extern int debug_tcp_client_snd_page;
+extern int debug_tcp_client_fwd_filter;
+extern int debug_tcp_client_connect_rs;
+extern int debug_tcp_client_connect;
+
+extern int show_msg_tcp_client_send;
+extern int show_msg_tcp_client_receive;
+extern int show_msg_tcp_client_snd_page;
+extern int show_msg_tcp_client_fwd_filter;
+extern int show_msg_tcp_client_connect_rs;
+extern int show_msg_tcp_client_connect;
 
 u32 create_address(u8 *ip)
 {
@@ -108,8 +123,12 @@ repeat_send:
                 }
         }
         set_fs(oldmm);
-        pr_info(" *** mtp | return from send after writing total: %d bytes, "
-                "last write: %d bytes | tcp_client_send \n", written, len);
+
+        if(can_show(tcp_client_send))
+                pr_info(" *** mtp | return from send after writing total: %d"
+                        " bytes, last write: %d bytes | tcp_client_send \n",
+                        written, len);
+
         return written ? written:len;
 }
 
@@ -145,14 +164,16 @@ read_again:
 
         if(len == -EAGAIN || len == -ERESTARTSYS)
         {
-                pr_info(" *** mtp | error while reading: %d | "
-                        "tcp_client_receive *** \n", len);
+                if(can_debug(tcp_client_receive))
+                        pr_info(" *** mtp | error while reading: %d | "
+                                "tcp_client_receive *** \n", len);
 
                 goto read_again;
         }
 
-
-        pr_info(" *** mtp | the server says: %s | tcp_client_receive *** \n",str);
+        if(can_show(tcp_client_receive))
+                pr_info(" *** mtp | the server says: %s |"
+                        " tcp_client_receive *** \n",str);
         //set_fs(oldmm);
         return len;
 }
@@ -169,8 +190,9 @@ int tcp_client_snd_page(struct remote_server *rs, struct page *page)
 
         conn_socket = rs->lcc_socket;
 
-        pr_info(" *** mtp | client sending RECV:PAGE to: %s | "
-                "tcp_client_snd_page ***\n", rs->rs_ip);                           
+        if(can_show(tcp_client_snd_page))
+                pr_info(" *** mtp | client sending RECV:PAGE to: %s | "
+                        "tcp_client_snd_page ***\n", rs->rs_ip);                           
 
         memset(out_msg, 0, len+1);                                        
 
@@ -186,14 +208,17 @@ snd_page_wait:
 
         if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
         {
-                pr_info(" *** mtp | client receiving message | "
-                        "tcp_client_snd_page ***\n");                           
+                if(can_show(tcp_client_snd_page))
+                        pr_info(" *** mtp | client receiving message | "
+                                "tcp_client_snd_page ***\n");                           
+
                 memset(in_msg, 0, len+1);                                 
 
                 ret = tcp_client_receive(conn_socket, in_msg, MSG_DONTWAIT); 
 
-                pr_info(" *** mtp | client received: %d bytes | "
-                        "tcp_client_snd_page ***\n", ret);
+                if(can_show(tcp_client_snd_page))
+                        pr_info(" *** mtp | client received: %d bytes | "
+                                "tcp_client_snd_page ***\n", ret);
         
                 if(ret > 0)                                              
                 {
@@ -225,10 +250,12 @@ snd_page_wait:
                                                 goto page_fail;
                                         }
 
-                                        pr_info(" *** mtp | page "
-                                                "send to: %s | "
-                                                "tcp_client_snd_page *** \n",
-                                                rs->rs_ip);
+                                        if(can_show(tcp_client_snd_page))
+                                                pr_info(" *** mtp | page"
+                                                        " send to: %s |"
+                                                        " tcp_client_snd_page"
+                                                        " *** \n",
+                                                        rs->rs_ip);
 
                                         goto snd_page_wait;
                                 }
@@ -237,6 +264,7 @@ snd_page_wait:
                         {
                                 if(memcmp(in_msg+5, "PAGE", 4) == 0)
                                 {
+                                        //if(can_show(tcp_client_snd_page))
                                         pr_info(" *** mtp | SUCCESS: page "
                                                 "found at: %s | "
                                                 "tcp_client_snd_page *** \n",
@@ -247,6 +275,7 @@ snd_page_wait:
                         {
                                 if(memcmp(in_msg+5, "PAGE", 4) == 0)
                                 {
+                                        //if(can_show(tcp_client_snd_page))
                                         pr_info(" *** mtp | FAIL: page "
                                                 "not found at: %s | "
                                                 "tcp_client_snd_page *** \n",
@@ -259,6 +288,7 @@ snd_page_wait:
         }
         else                                                              
         {                                                                  
+                //if(can_show(tcp_client_snd_page))
                 pr_info(" *** mtp | client RECV:PAGE:%s failed | "
                         "tcp_client_snd_page ***\n", rs->rs_ip);
 
@@ -282,7 +312,7 @@ int tcp_client_fwd_filter(struct bloom_filter *bflt)
         void *vaddr;
         //unsigned long off;
         int size;
-        int i;
+        //int i;
         //struct page *pg;
         //int pc = 0;
 
@@ -290,21 +320,25 @@ int tcp_client_fwd_filter(struct bloom_filter *bflt)
 
 bflt_resend:                                                                  
 
-        pr_info(" *** mtp | client sending FRWD:BFLT | "
-                "tcp_client_fwd_filter ***\n");                           
+        if(can_show(tcp_client_fwd_filter))
+                pr_info(" *** mtp | client sending FRWD:BFLT | "
+                        "tcp_client_fwd_filter ***\n");                           
 
         mutex_lock(&bflt->lock);
 
+        /*
         for(i = 0; i < bflt->bitmap_size; i++)
                 if(test_bit(i, bflt->bitmap))
                         pr_info("bit: %d of bflt is set\n", i);
+        */
 
         mutex_unlock(&bflt->lock);
 
         size = BITS_TO_LONGS(bflt->bitmap_size)*sizeof(unsigned long);
 
-        pr_info(" *** mtp | bmap bits size: %d, bmap bytes size: %d | "
-                "tcp_client_fwd_filter\n", bflt->bitmap_size, size);
+        if(can_debug(tcp_client_fwd_filter))
+                pr_info(" *** mtp | bmap bits size: %d, bmap bytes size: %d |"
+                        " tcp_client_fwd_filter\n", bflt->bitmap_size, size);
 
         memset(out_msg, 0, len+1);                                        
 
@@ -322,14 +356,17 @@ fwd_bflt_wait:
 
         if(!skb_queue_empty(&cli_conn_socket->sk->sk_receive_queue))              
         {                                                                        
-                pr_info(" *** mtp | client receiving message | "
-                        "tcp_client_fwd_filter ***\n");                           
+                if(can_show(tcp_client_fwd_filter))
+                        pr_info(" *** mtp | client receiving message | "
+                                "tcp_client_fwd_filter ***\n");                           
+
                 memset(in_msg, 0, len+1);                                 
 
                 ret = tcp_client_receive(cli_conn_socket, in_msg, MSG_DONTWAIT); 
 
-                pr_info(" *** mtp | client received: %d bytes | "
-                        "tcp_client_fwd_filter ***\n", ret);
+                if(can_show(tcp_client_fwd_filter))
+                        pr_info(" *** mtp | client received: %d bytes | "
+                                "tcp_client_fwd_filter ***\n", ret);
 
                 if(ret > 0)                                              
                 {
@@ -391,10 +428,12 @@ fwd_bflt_wait:
                                          * leader server, who is wating for the
                                          * entire size of bloom filter
                                          */
-                                        pr_info(" *** mtp | client send: %d "
-                                                "bytes as bflt | "
-                                                "tcp_client_fwd_filter ***\n", 
-                                                ret);                           
+                                        if(can_show(tcp_client_fwd_filter))
+                                                pr_info(" *** mtp | client send"
+                                                        ": %d bytes as bflt |"
+                                                        " tcp_client_fwd_filter"
+                                                        " ***\n", 
+                                                        ret);                           
 
                                         /* 
                                          * this resending can also be taken out
@@ -459,9 +498,11 @@ fwd_bflt_wait:
                                          * was done in normal remote server client
                                          */
                                         attempts++;
-                                        pr_info(" *** mtp | client re-sending "
-                                                "FWD:BFLT | " 
-                                                "leader_client_fwd_filter***\n");
+                                        if(can_show(tcp_client_fwd_filter))
+                                                pr_info(" *** mtp | client"
+                                                        " re-sending FWD:BFLT |"
+                                                        " leader_client_fwd_"
+                                                        " filter***\n");
 
                                         goto bflt_resend;
                                 }
@@ -471,9 +512,11 @@ fwd_bflt_wait:
                         {                                                   
                                 if(memcmp(in_msg+5, "BFLT", 4) == 0)
                                 {
-                                        pr_info(" *** mtp | client FWD:BFLT "
-                                                "success | "
-                                                "tcp_client_fwd_filter ***\n");   
+                                        if(can_show(tcp_client_fwd_filter))
+                                                pr_info(" *** mtp | client"
+                                                        " FWD:BFLT success |"
+                                                        " tcp_client_fwd_filter"
+                                                        " ***\n");   
                                 }
                         }                                                
                         else                                              
@@ -492,17 +535,20 @@ fwd_bflt_wait:
                 }                                                             
         }                                                                    
         else                                                              
-        {                                                                  
-                pr_info(" *** mtp | client FWD:BFLT failed | "
-                        "tcp_client_fwd_filter ***\n");                       
+        {                                                                   
+                if(can_show(tcp_client_fwd_filter))
+                        pr_info(" *** mtp | client FWD:BFLT failed |"
+                                " tcp_client_fwd_filter ***\n");                       
                 goto bflt_fail;                                                  
         }                                 
 
         return 0;
 
 bflt_fail:
-        pr_info(" *** mtp | client FWD:BFLT failed | "
-                "tcp_client_fwd_filter ***\n");                       
+
+        if(can_show(tcp_client_fwd_filter))
+                pr_info(" *** mtp | client FWD:BFLT failed | "
+                        "tcp_client_fwd_filter ***\n");                       
         return -1;
 }
 
@@ -521,11 +567,13 @@ int tcp_client_connect_rs(struct remote_server *rs)
         port = rs->rs_port; 
         //id = rs->rs_id;
 
-        pr_info(" *** mtp | network client connecting to remote server: %s |"
-                " tcp_client_connect_rs *** \n", ip);
+        if(can_show(tcp_client_connect_rs))
+                pr_info(" *** mtp | network client connecting to remote"
+                        " server: %s | tcp_client_connect_rs *** \n", ip);
 
-        pr_info(" *** mtp | remote server destination ip: %s:%d | "
-                "tcp_client_connect_rs ***\n", ip, port);
+        if(can_show(tcp_client_connect_rs))
+                pr_info(" *** mtp | remote server destination ip: %s:%d |"
+                        " tcp_client_connect_rs ***\n", ip, port);
 
         memset(&saddr, 0, sizeof(saddr));
         saddr.sin_family = AF_INET;
@@ -536,14 +584,16 @@ int tcp_client_connect_rs(struct remote_server *rs)
         ret = conn_socket->ops->connect(conn_socket, (struct sockaddr *)&saddr,\
                                         sizeof(saddr), O_RDWR);
         
-        pr_info(" *** mtp | connection attempt return value: %d | "
-                "tcp_client_connect_rs *** \n", ret);
+        if(can_show(tcp_client_connect_rs))
+                pr_info(" *** mtp | connection attempt return value: %d |"
+                        " tcp_client_connect_rs *** \n", ret);
 
         if(ret && (ret != -EINPROGRESS))
         {
-                pr_info(" *** mtp | network client error: %d while "
-                        "connecting to rs[%s] | tcp_client_connect_rs *** \n",
-                        ret, ip);
+                if(can_debug(tcp_client_connect_rs))
+                        pr_info(" *** mtp | network client error: %d while"
+                                " connecting to rs[%s] | tcp_client_connect_rs"
+                                " *** \n", ret, ip);
                 goto fail;
         }
 
@@ -578,8 +628,9 @@ int tcp_client_connect(void)
         ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &cli_conn_socket);
         if(ret < 0)
         {
-                pr_info(" *** mtp | Error: %d while creating first socket. | "
-                        "tcp_client_connect ***\n", ret);
+                if(can_debug(tcp_client_connect))
+                        pr_info(" *** mtp | Error: %d while creating first"
+                                " socket. | tcp_client_connect ***\n", ret);
                 goto err;
         }
 
@@ -595,8 +646,9 @@ int tcp_client_connect(void)
 
         if(ret && (ret != -EINPROGRESS))
         {
-                pr_info(" *** mtp | Error: %d while connecting using conn "
-                        "socket. | tcp_client_connect ***\n", ret);
+                if(can_debug(tcp_client_connect))
+                        pr_info(" *** mtp | Error: %d while connecting using"
+                                " conn socket. | tcp_client_connect ***\n",ret);
                 goto fail;
         }
 
@@ -604,7 +656,10 @@ int tcp_client_connect(void)
          * need.
          */
 //resend:
-        pr_info(" *** mtp | client sending REGRS | tcp_client_connect ***\n");
+        if(can_show(tcp_client_connect))
+                pr_info(" *** mtp | client sending REGRS |"
+                        " tcp_client_connect ***\n");
+
         memset(out_msg, 0, len+1);
         strcat(out_msg, "REGRS:2325"); 
         tcp_client_send(cli_conn_socket, out_msg, strlen(out_msg),\
@@ -622,8 +677,9 @@ int tcp_client_connect(void)
         */
                 if(!skb_queue_empty(&cli_conn_socket->sk->sk_receive_queue))
                 {
-                        pr_info(" *** mtp | client receiving message | "
-                                "tcp_client_connect ****\n");
+                        if(can_show(tcp_client_connect))
+                                pr_info(" *** mtp | client receiving message |"
+                                        " tcp_client_connect ****\n");
 
                         memset(in_msg, 0, len+1);
 
@@ -634,24 +690,31 @@ int tcp_client_connect(void)
                         {
                                 if(memcmp(in_msg, "RSREGD", 6) == 0)
                                 {
-                                        pr_info(" *** mtp | client REGRS success"
-                                                " | tcp_client_connect ***\n");
+                                        if(can_show(tcp_client_connect))
+                                                pr_info(" *** mtp | client"
+                                                        " REGRS success |"
+                                                        " tcp_client_connect"
+                                                        " ***\n");
                                         goto success; 
                                 }
                                 else
                                 {
                                         //pr_info("client re-sending REGRS\n");
                                         //goto resend;
-                                        pr_info(" *** 1.mtp | client REGRS failed"
-                                                " | tcp_client_connect ***\n");
+                                        if(can_show(tcp_client_connect))
+                                                pr_info(" *** 1.mtp | client"
+                                                        " REGRS failed |"
+                                                        " tcp_client_connect"
+                                                        " ***\n");
                                         goto fail;
                                 }
                         }
                 }
                 else
                 {
-                        pr_info(" *** 2.mtp | client REGRS failed | "
-                                " tcp_client_connect ***\n");
+                        if(can_show(tcp_client_connect))
+                                pr_info(" *** 2.mtp | client REGRS failed |"
+                                        " tcp_client_connect ***\n");
                         goto fail;
                 }
         /*

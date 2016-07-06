@@ -295,17 +295,19 @@ extern struct tmem_page_descriptor* tmem_pgp_delete_from_obj(\
 /*get client's page content functions*/
 extern uint8_t tmem_get_first_byte(struct page*);
 extern int tmem_pcd_copy_to_client(struct page* client_page,\
-		struct tmem_page_descriptor *pgp);                                        
+		struct tmem_page_descriptor *pgp);                                
 /*copy from client*/
 extern int tmem_copy_from_client(struct page*, struct page*);
 /*copy to client*/
-extern int tmem_copy_to_client(struct page* client_page, struct page* page);             
+extern int tmem_copy_to_client(struct page* client_page, struct page* page);      
 
 /*main dedup function*/
 extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 
+/*main remote dedup function*/
+extern int pcd_remote_associate(struct page*);
 /*custom radix_tree_destroy function*/
-//bool  __radix_tree_delete_node(struct radix_tree_root*, struct radix_tree_node*); 
+//bool  __radix_tree_delete_node(struct radix_tree_root*,struct radix_tree_node*);
 //void* indirect_to_ptr(void *);
 
 /*list functions*/
