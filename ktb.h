@@ -14,6 +14,7 @@
 #define MAX_POOLS_PER_CLIENT 16
 #define TMEM_POOL_PRIVATE_UUID	{ 0, 0 }
 #define OBJ_HASH_BUCKETS 256
+#define PAGE_HASH_MASK 256
 #define OBJ_HASH_BUCKETS_MASK (OBJ_HASH_BUCKETS-1)
 #define NOT_SHAREABLE ((uint16_t)-1UL)
 
@@ -213,9 +214,14 @@ struct tmem_page_descriptor {
 /******************************************************************************/
 struct tmem_system_view {
         struct rb_root pcd_tree_roots[256]; 
+        struct radix_tree_root pcd_remote_tree_roots[256];
+        struct radix_tree_root pcd_remotified_tree_roots[256];
         rwlock_t pcd_tree_rwlocks[256]; 
+        rwlock_t pcd_remote_tree_rwlocks[256];
+        rwlock_t pcd_remotified_tree_rwlocks[256];
         struct list_head remote_sharing_candidate_list;
         struct list_head local_only_list;
+        //struct list_head pcd_preorder_stack;
         rwlock_t system_list_rwlock;
         //spinlock_t system_list_lock;
 };
@@ -223,6 +229,8 @@ struct tmem_system_view {
 /*				  KTB pool object PAGE related data structures*/
 /******************************************************************************/
 struct tmem_page_content_descriptor {
+        /*status: 0 - local, 1 - being accessed by remote, 2 - put in remote*/
+        int status;
 	/*
 	union 
 	{
@@ -232,7 +240,7 @@ struct tmem_page_content_descriptor {
 	*/
         /*this pgp field is just for testing correctness*/
         struct tmem_page_descriptor *pgp;
-	struct page* system_page;  //page frame pointer
+	struct page *system_page;  //page frame pointer
 	struct rb_node pcd_rb_tree_node;
   	//uint32_t index;
 	uint32_t size; 
@@ -241,13 +249,20 @@ struct tmem_page_content_descriptor {
 	
         struct list_head system_rscl_pcds;
         struct list_head system_lol_pcds;
+        //struct list_head preorder_stack;
+        char *remote_ip;
+        unsigned long remote_id;
+        uint8_t firstbyte;
+        //uint64_t pagehash;
 	//struct list_head pgp_list;
     	//bool eviction_attempted;  // CHANGE TO lifetimes? (settable)
 	
-	/* meaning of 'size'
+	/* 
+         * meaning of 'size'
 	 * if compression_enabled -> 0<size<PAGE_SIZE (*cdata)
          * else if tze, 0<=size<PAGE_SIZE, rounded up to mult of 8
-         * else PAGE_SIZE -> *pfp */
+         * else PAGE_SIZE -> *pfp
+         */
 };
 /******************************************************************************/
 /*		 	     End KTB pool object PAGE  related data structures*/

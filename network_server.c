@@ -277,10 +277,9 @@ recv_out:
         return totread?totread:len;
 }
 
-//int compare_page(struct page *new_page, void *new_page_vaddr)
-int compare_page(struct page *new_page)
+/*
+int dummy_ compare_page(struct page *new_page, void *new_page_vaddr)
 {
-        /*
         void *vaddr;
         int ret1 = 0;
         int ret2 = 0;
@@ -310,6 +309,10 @@ int compare_page(struct page *new_page)
                 }
         }
         */
+}
+
+int compare_page(struct page *new_page, unsigned long  *id)
+{
         if(pcd_remote_associate(new_page))
         {
                 if(can_show(compare_page))
@@ -327,7 +330,7 @@ int compare_page(struct page *new_page)
 
 }
 
-int rcv_and_cmp_page(struct tcp_conn_handler_data *conn)
+int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, unsigned long *id)
 {
         int ret, len = 49;
         //int i;
@@ -394,7 +397,7 @@ int rcv_and_cmp_page(struct tcp_conn_handler_data *conn)
                 goto recv_page_fail;
 
         //if(compare_page(new_page, new_page_vaddr) < 0)
-        if(compare_page(new_page) < 0)
+        if(compare_page(new_page, id) < 0)
                 goto recv_page_fail;
 
         return 0;
@@ -506,41 +509,43 @@ void deregister_rs(void)
 
 }
 
-/*
-void snd_page(struct page *page)
+void remote_get(char *ip, struct page *page)
 {
         struct remote_server *rs_tmp;
 
-        //down_read(&rs_rwmutex);
-        read_lock(&rs_rwspinlock);
+        down_read(&rs_rwmutex);
+        //read_lock(&rs_rwspinlock);
         if(!(list_empty(&rs_head)))
         {
-                 // sending this page to everybody is not my aim;
-                 // in actual scenario the page has to be sent to an 
-                 // RS in whose bloom filter it was a hit
-                 
                 list_for_each_entry(rs_tmp, &(rs_head), rs_list)
                 {
                         //up_read(&rs_rwmutex);
-                        read_unlock(&rs_rwspinlock);
-                        pr_info(" *** mtp | found remote server "
-                                "info:\n | ip-> %s | port-> %d "
-                                "| snd_page ***\n", 
-                                rs_tmp->rs_ip, rs_tmp->rs_port);
+                        //read_unlock(&rs_rwspinlock);
+                        if(can_debug(remote_get))
+                                pr_info(" *** mtp | found remote server "
+                                        "info:\n | ip-> %s | port-> %d "
+                                        "| remote_get ***\n", 
+                                        rs_tmp->rs_ip, rs_tmp->rs_port);
 
-                        if(tcp_client_snd_page(rs_tmp, page) < 0)
-                                pr_info(" *** mtp | page was not found with RS"
-                                        ": %s | snd_page *** \n", 
-                                        rs_tmp->rs_ip);
-                        read_lock(&rs_rwspinlock);
+                        if(strcmp(rs_tmp->ip, ip) == 0)
+                        {
+
+                                if(tcp_client_remote_get(rs_tmp, page) < 0)
+                                        pr_info(" *** mtp | page was not found "
+                                                "with RS: %s | remote_get***\n", 
+                                                rs_tmp->rs_ip);
+
+                                up_read(&rs_rwmutex);
+                                return;
+                        }
+                        //read_lock(&rs_rwspinlock);
                         //down_read(&rs_rwmutex);
                 }
         }
         //else
-        read_unlock(&rs_rwspinlock);
-        //up_read(&rs_rwmutex);
+        //read_unlock(&rs_rwspinlock);
+        up_read(&rs_rwmutex);
 }
-*/
 
 struct remote_server* look_up_rs(char *ip, int port)
 {
@@ -942,12 +947,13 @@ bfltresp:
                               }
                               else if(memcmp(in_buf+5, "PAGE", 4) == 0)
                               {
-                                      //obtain ip or unique id from in_buf
-                                      //do comparison of this page in the tmem
-                                      //bknd.
-                                      //Give response.
+                                      /* 
+                                       * do comparison of this page in 
+                                       * the tmem bknd. Give response.
+                                       */
+                                      unsigned long id;
                                       conn_data->in_buf = in_buf;
-                                      if(rcv_and_cmp_page(conn_data) < 0)
+                                      if(rcv_and_cmp_page(conn_data,&id)<0)
                                               goto pagefail;
 
                                       memset(out_buf, 0, len+1);

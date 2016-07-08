@@ -24,6 +24,8 @@ MODULE_AUTHOR("Aby Sam Ross");
 //static struct tmem_client ktb_host;
 //static int delay = 300;
 int bflt_bit_size = 268435456;
+//unsigned long pcd_remote_ids = 0;
+unsigned long remote_tree_ids[256];
 
 struct tmem_system_view tmem_system;
 struct task_struct *fwd_bflt_thread = NULL;
@@ -44,6 +46,7 @@ rwlock_t pcd_tree_rwlocks[256];
 /*                                                      List global variables */
 /******************************************************************************/ 
 //DEFINE_SPINLOCK(client_list_lock);
+DEFINE_RWLOCK(id_rwlock);
 /******************************************************************************/ 
 /*                                                  End list global variables */
 /******************************************************************************/ 
@@ -131,11 +134,35 @@ u64 failed_tmem_page_invalidates;
 /******************************************************************************/ 
 /*                                                     End Debugfs files/vars */
 /******************************************************************************/ 
+void update_pcd_status(struct tmem_page_content_descriptor *pcd,\
+                       uint8_t firstbyte, struct remote_server *rs)
+{
+        char *ip = NULL;
+        ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
+
+        /* 
+         * DOUBT: should I take a reference to the pcd->system_page that I am
+         * going to free up outside the lock, because memory freeing routines
+         * can sleep?
+         */ 
+        strcpy(ip, rs->rs_ip);
+
+        write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+
+        if((pcd->remote_ip == NULL) && (pcd->system_page != NULL))
+                __free_page(pcd->system_page);
+        else if(pcd->remote_ip != NULL)
+                kfree(pcd->remote_ip);
+
+        pcd->remote_ip = ip;
+
+        write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+}
 //static void check_remote_sharing_op(unsigned long data)
 int  check_remote_sharing_op(void)
 {
         struct tmem_page_content_descriptor *pcd;
-        uint8_t byte;
+        uint8_t firstbyte;
         bool bloom_res;
         int succ_count = 0;
         int count = 0;
@@ -185,11 +212,19 @@ int  check_remote_sharing_op(void)
                         void *vaddr1, *vaddr2;
 
                         count++;
-                        byte = tmem_get_first_byte(pcd->system_page);
+                        
                         vaddr1 = page_address(pg);
                         memset(vaddr1, 0, PAGE_SIZE);
+
+                        firstbyte = tmem_get_first_byte(pcd->system_page);
+
+	                read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+
                         vaddr2 = page_address(pcd->system_page);
+
                         memcpy(vaddr1, vaddr2, PAGE_SIZE);
+
+	                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
                         read_unlock(&(tmem_system.system_list_rwlock));
 
@@ -204,9 +239,8 @@ int  check_remote_sharing_op(void)
                                          * create a bloom filter, you have only
                                          * the bitmap
                                          */
-
                                         if(bloom_filter_check(rs->rs_bflt,\
-                                                              &byte, 1,\
+                                                              &firstbyte, 1,\
                                                               &bloom_res) < 0)
                                         {
                                                 pr_info(" *** mtp | checking for"
@@ -223,12 +257,12 @@ int  check_remote_sharing_op(void)
                                                         "fwd_filter *** \n");
 
                                                 if(tcp_client_snd_page(rs,\
-                                                        pg) < 0 )
+                                                                    pg) < 0 )
                                                 {
-                                                        pr_info(" *** mtp | "
-                                                                "page was not "
-                                                                "found with RS "
-                                                                ": %s | "
+                                                        pr_info(" *** mtp |"
+                                                                " page was not"
+                                                                " found with RS"
+                                                                " : %s | "
                                                                 "check_remote_"
                                                                 "sharing_op ***"
                                                                 "\n",rs->rs_ip);
@@ -242,6 +276,11 @@ int  check_remote_sharing_op(void)
                                                                 " check_remote_"
                                                                 "sharing_op ***"
                                                                 "\n",rs->rs_ip);
+
+                                                        update_pcd_status(\
+                                                        pcd, firstbyte, rs);
+
+
                                                 }
                                         }
 
@@ -723,11 +762,11 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 
 	ASSERT(pgp->size != -1);
 
-	/*If page is locally deduplicated*/
+	/*If local dedup is enabled*/
 	if(kvm_tmem_dedup_enabled && (pgp->firstbyte != NOT_SHAREABLE))
 		rc = tmem_pcd_copy_to_client(client_page, pgp);
 	else
-       	rc = tmem_copy_to_client(client_page, pgp->tmem_page);
+                rc = tmem_copy_to_client(client_page, pgp->tmem_page);
 
 	if ( rc <= 0 )
 	{
@@ -1234,6 +1273,7 @@ refind:
 			ret = -ENOMEM;
 			goto del_pgp_from_obj;
 		}
+                /*
                 else if(dedup_ret == 1)
                 {
                         //no match found,
@@ -1242,13 +1282,12 @@ refind:
                         write_lock(&(tmem_system.system_list_rwlock));
 
                         list_add_tail(&(pgp->pcd->system_rscl_pcds),\
-                                &(tmem_system.remote_sharing_candidate_list));
+                        &(tmem_system.remote_sharing_candidate_list));
 
                         write_unlock(&(tmem_system.system_list_rwlock));
                         //spin_unlock(&(tmem_system.system_list_lock));
                         update_summary(pgp);
                 }
-                /*
                  * This is not needed as only the matched pcd is to be moved
                  * from the rscl to lol, which is done in pcd_associate().
                 else if(dedup_ret == 0)
@@ -1675,14 +1714,33 @@ static int __init ktb_main_init(void)
 		{
 			for(i = 0; i < 256; i++)
 			{
-				tmem_system.pcd_tree_roots[i] = RB_ROOT;
-				rwlock_init(&(tmem_system.pcd_tree_rwlocks[i]));
+				tmem_system.pcd_tree_roots[i] = 
+                                RB_ROOT;
+
+                                tmem_system.pcd_remote_tree_roots[i] = 
+                                RADIX_TREE_INIT(GFP_KERNEL);
+
+                                tmem_system.pcd_remotified_tree_roots[i] = 
+                                RADIX_TREE_INIT(GFP_KERNEL);
+
+				rwlock_init(\
+                                &(tmem_system.pcd_tree_rwlocks[i]));
+
+                                rwlock_init(\
+                                &(tmem_system.pcd_remote_tree_rwlocks[i]));
+
+                                rwlock_init(\
+                                &(tmem_system.pcd_remotified_tree_rwlocks[i]));
 			}
 
                         INIT_LIST_HEAD(\
                         &(tmem_system.remote_sharing_candidate_list));
-                        INIT_LIST_HEAD(&(tmem_system.local_only_list));
+
+                        INIT_LIST_HEAD(\
+                        &(tmem_system.local_only_list));
+
                         rwlock_init(&(tmem_system.system_list_rwlock));
+                        //INIT_LIST_HEAD(&(tmem_system.pcd_preorder_stack));
                         //spin_lock_init(&(tmem_system.system_list_lock));
 		}
 
@@ -1989,7 +2047,6 @@ static int __init ktb_main_init(void)
 netfail:
 
         vfree(tmem_system_bloom_filter);
-        */
 
 init_bflt_alg_fail:
 
