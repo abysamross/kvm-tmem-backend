@@ -178,7 +178,80 @@ read_again:
         return len;
 }
 
-int tcp_client_snd_page(struct remote_server *rs, struct page *page)
+int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
+			      uint8_t firstbyte, unsigned long remote_id)
+{
+        int ret = 0, len = 49;
+        char in_msg[len+1];
+        char out_msg[len+1];
+        void *page_vaddr;
+        struct socket *conn_socket; 
+
+        DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
+
+        conn_socket = rs->lcc_socket;
+	page_vaddr = page_address(page);
+	memset(page_vaddr, 0, PAGE_SIZE);
+
+        if(can_show(tcp_client_remotified_get))
+		pr_info(" *** mtp | client sending RGET:PAGE to: %s for page"
+			" having firstbyte: %u, remote index: %lu |"
+			" tcp_client_remotified_get ***\n", 
+			rs->rs_ip, firstbyte, remote_id);                           
+
+        memset(out_msg, 0, len+1);                                        
+        snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%lu",\
+		 firstbyte, remote_id);
+
+        tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
+        
+rget_wait_label:
+
+        wait_event_timeout(rget_wait,\
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           10*HZ);   
+
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
+        {
+                if(can_show(tcp_client_remotified_get))
+                        pr_info(" *** mtp | client receiving message | "
+                                "tcp_client_remotified_get ***\n");                           
+
+		ret = 
+		tcp_client_receive(conn_socket, page_vaddr, PAGE_SIZE,\
+				   MSG_DONTWAIT, 1);
+
+                if(can_show(tcp_client_remotified_get))
+                        pr_info(" *** mtp | client received: %d bytes | "
+                                "tcp_client_remotified_get ***\n", ret);
+        
+		if(ret != PAGE_SIZE)
+			goto rget_fail;
+
+		if(can_show(tcp_client_remotified_get))
+			pr_info(" *** mtp | RGET:PAGE to: %s for page having"
+				" firstbyte: %u, remote index: %lu SUCCESS |"
+				" tcp_client_remotified_get ***\n", rs->rs_ip,
+				firstbyte, remote_id);                           
+        }
+        else                                                              
+                goto rget_fail;                                                  
+
+        return 0;
+
+rget_fail:
+
+	if(can_show(tcp_client_remotified_get))
+		pr_info(" *** mtp | RGET:PAGE to: %s for page having"
+			" firstbyte: %u, remote index: %lu FAILED |"
+			" tcp_client_remotified_get ***\n", rs->rs_ip,
+			firstbyte, remote_id);                           
+
+         return -1;
+}
+
+int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
+			unsigned long *remote_id)
 {
         int ret = 0, len = 49;
         char in_msg[len+1];
@@ -264,11 +337,18 @@ snd_page_wait:
                         {
                                 if(memcmp(in_msg+5, "PAGE", 4) == 0)
                                 {
+					int i = 0;
+					char *tmp;
+					//extract remote_id here.
+					for(i = 0; i < 3; i++)
+						tmp = strsep(&in_msg, ":");
+					
+                			kstrtou64(tmp, 10, remote_id);
                                         //if(can_show(tcp_client_snd_page))
                                         pr_info(" *** mtp | SUCCESS: page "
-                                                "found at: %s | "
+                                                "found at: %s with ID: %lu| "
                                                 "tcp_client_snd_page *** \n",
-                                                rs->rs_ip);
+                                                rs->rs_ip, *remote_id);
                                 }
                         }
                         else if(memcmp(in_msg, "FAIL", 4) == 0)
@@ -278,8 +358,7 @@ snd_page_wait:
                                         //if(can_show(tcp_client_snd_page))
                                         pr_info(" *** mtp | FAIL: page "
                                                 "not found at: %s | "
-                                                "tcp_client_snd_page *** \n",
-                                                rs->rs_ip);
+                                                "tcp_client_snd_page *** \n", rs->rs_ip);
                                 }
                         }
                         else
@@ -551,6 +630,7 @@ bflt_fail:
                         "tcp_client_fwd_filter ***\n");                       
         return -1;
 }
+
 
 int tcp_client_connect_rs(struct remote_server *rs)
 {

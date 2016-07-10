@@ -278,7 +278,7 @@ recv_out:
 }
 
 /*
-int dummy_ compare_page(struct page *new_page, void *new_page_vaddr)
+int dummy_compare_page(struct page *new_page, void *new_page_vaddr)
 {
         void *vaddr;
         int ret1 = 0;
@@ -308,12 +308,115 @@ int dummy_ compare_page(struct page *new_page, void *new_page_vaddr)
                         return 0;
                 }
         }
-        */
+}
+*/
+
+void get_remote_page(struct tcp_conn_handler_data *conn)
+{
+	uint8_t firstbyte;
+        int ret = 0, len = 49, i = 0;
+        char in_msg[len+1];
+        char out_msg[len+1];
+        void *vaddr;
+        void *new_page_vaddr;
+	char *tmp;
+        struct socket *conn_socket; 
+        struct page *new_page = NULL;
+	unsigned long id;
+
+        new_page = alloc_page(GFP_ATOMIC);
+	/*
+        new_page_vaddr = page_address(new_page);
+        memset(new_page_vaddr, 0, PAGE_SIZE);
+	*/
+
+        if(new_page == NULL)
+	{
+		memset(out_msg, 0, len+1);                                        
+		strcat(out_msg, "FAIL");
+		ret = -1;
+                goto rget_fail;
+	}
+
+	for(i = 0; i < 4; i++)
+	{
+		tmp = strsep(&(conn->in_buf), ":");
+
+		if(i == 2)
+			kstrtou8(tmp, 10, &firstbyte);
+		/*
+		if(i == 3)
+			kstrtou64(tmp, 10, &id);
+		*/
+	}
+
+	kstrtou64(tmp, 10, &id);
+
+        if(can_show(get_remote_page))
+		pr_info(" *** mtp | client looking for RGET:PAGE"
+			" with firstbyte: %u, id: %lu | get_remote_page"
+			" ***\n", firstbyte, id);                           
+
+	ret = ktb_remote_get(new_page, firstbyte, id);
+
+        if(can_show(get_remote_page))
+		pr_info(" *** mtp | client sending response for RGET:PAGE"
+			" with firstbyte: %u, id: %lu | get_remote_page"
+			" ***\n", firstbyte, id);                           
+
+	if(ret < 0)
+	{
+		memset(out_msg, 0, len+1);                                        
+		strcat(out_msg, "FAIL");
+
+		if(can_show(get_remote_page))
+			pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
+				" id: %lu PAGE NOT FOUND | get_remote_page ***\n",
+				firstbyte, id);                           
+
+		goto rget_fail_re;
+	}
+	else if(ret == 0)
+	{
+		ret = 
+		kernel_sendpage(conn->accept_socket, new_page, 0,\
+				PAGE_SIZE, MSG_DONTWAIT);
+	}
+
+        if(ret != PAGE_SIZE)
+        {
+		msleep(5000);
+		memset(out_msg, 0, len+1);        
+		strcat(out_msg, "FAIL");
+		goto rget_fail;
+	}
+	else if(ret == PAGE_SIZE)
+	{
+		if(can_show(get_remote_page))
+			pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
+				" id: %lu SUCCEEDED | get_remote_page ***\n",
+				firstbyte, id);                           
+	}
+
+	return 0;
+
+rget_fail:
+
+	if(can_show(get_remote_page))
+		pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
+			" id: %lu FAILED | get_remote_page ***\n",
+			firstbyte, id);                           
+rget_fail_re:
+
+	ret = 
+	tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
+
+	return -1;
 }
 
 int compare_page(struct page *new_page, unsigned long  *id)
 {
-        if(pcd_remote_associate(new_page))
+        if(pcd_remote_associate(new_page, id))
         {
                 if(can_show(compare_page))
                         pr_info(" *** mtp | page test FAILED |"
@@ -323,8 +426,9 @@ int compare_page(struct page *new_page, unsigned long  *id)
         else
         {
                 if(can_show(compare_page))
-                        pr_info(" *** mtp | page test SUCCEEDED |"
-                                " compare_page ***\n");
+                        pr_info(" *** mtp | page test SUCCEEDED."
+				" ID = %lu | compare_page ***\n",
+				*id);
                 return 0;
         }
 
@@ -438,7 +542,7 @@ struct remote_server *register_rs(struct socket *socket, char* ip, int port)
 }
 
 /*
-int update_bflt(struct remote_server *rs)
+int unused_old_update_bflt(struct remote_server *rs)
 {
         struct remote_server *rs_tmp;
 
@@ -507,44 +611,6 @@ void deregister_rs(void)
         //write_unlock(&rs_rwspinlock);
         up_write(&rs_rwmutex);
 
-}
-
-void remote_get(char *ip, struct page *page)
-{
-        struct remote_server *rs_tmp;
-
-        down_read(&rs_rwmutex);
-        //read_lock(&rs_rwspinlock);
-        if(!(list_empty(&rs_head)))
-        {
-                list_for_each_entry(rs_tmp, &(rs_head), rs_list)
-                {
-                        //up_read(&rs_rwmutex);
-                        //read_unlock(&rs_rwspinlock);
-                        if(can_debug(remote_get))
-                                pr_info(" *** mtp | found remote server "
-                                        "info:\n | ip-> %s | port-> %d "
-                                        "| remote_get ***\n", 
-                                        rs_tmp->rs_ip, rs_tmp->rs_port);
-
-                        if(strcmp(rs_tmp->ip, ip) == 0)
-                        {
-
-                                if(tcp_client_remote_get(rs_tmp, page) < 0)
-                                        pr_info(" *** mtp | page was not found "
-                                                "with RS: %s | remote_get***\n", 
-                                                rs_tmp->rs_ip);
-
-                                up_read(&rs_rwmutex);
-                                return;
-                        }
-                        //read_lock(&rs_rwspinlock);
-                        //down_read(&rs_rwmutex);
-                }
-        }
-        //else
-        //read_unlock(&rs_rwspinlock);
-        up_read(&rs_rwmutex);
 }
 
 struct remote_server* look_up_rs(char *ip, int port)
@@ -910,7 +976,7 @@ int connection_handler(void *data)
                                       if(receive_bflt(conn_data) < 0)
                                               goto bfltfail;
 
-                                      //update_bflt(rs);
+                                      //unused_old_update_bflt(rs);
                                       
                                       memset(out_buf, 0, len+1);
                                       strcat(out_buf, "DONE:BFLT");
@@ -937,7 +1003,7 @@ bfltresp:
 
                                       if(memcmp(out_buf, "DONE:BFLT", 9) == 0)
                                       {
-                                              if(check_remote_sharing_op() < 0)
+                                              if(ktb_remotify_put_pages() < 0)
                                                       break;
                                       }
                                       /*
@@ -957,7 +1023,9 @@ bfltresp:
                                               goto pagefail;
 
                                       memset(out_buf, 0, len+1);
-                                      strcat(out_buf, "FNDS:PAGE");
+                                      //strcat(out_buf, "FNDS:PAGE");
+				      snprintf(out_buf, sizeof(out_buf),\
+					       "FNDS:PAGE:%lu", id);
                                       goto pageresp;
 pagefail:
                                       memset(out_buf, 0, len+1);
@@ -968,6 +1036,11 @@ pageresp:
                                                       MSG_DONTWAIT);
                               }
                       }
+		      else if(memcmp(in_buf, "RGET", 4) == 0)
+		      {
+			      conn_data->in_buf = in_buf;
+			      get_remote_page(conn_data);
+		      }
                       else if(memcmp(in_buf, "QUIT", 4) == 0)
                       {
                               conn_data->in_buf = in_buf;
@@ -1321,111 +1394,6 @@ err:
         do_exit(0);
 }
 
-int timed_fwd_filter(void* data)
-{
-        unsigned long jleft = 0;
-
-        struct bloom_filter *bflt = (struct bloom_filter *)data;
-
-        //DECLARE_WAIT_QUEUE_HEAD(timed_fflt_wait);
-
-        allow_signal(SIGKILL|SIGSTOP);
-
-        set_current_state(TASK_INTERRUPTIBLE);
-        //set_freezable();
-
-        while(!kthread_should_stop())
-        {
-                /*
-                try_to_freeze();
-
-                jleft = 
-                wait_event_freezable_timeout(timed_fflt_wait,
-                                        (kthread_should_stop() == true),
-                                           delay*HZ);
-                */
-
-                /*
-                __set_current_state(TASK_INTERRUPTIBLE);
-                jleft = schedule_timeout(delay*HZ);
-                */
-                jleft = schedule_timeout(delay*HZ);
-
-                if(can_show(timed_fwd_filter))
-                        pr_info("*** mtp | Bloom filter transfer timer expired!"
-                                " TIMER VALUE: %lu secs | timed_fwd_filter"
-                                " *** \n", (jleft/HZ));
-
-                /*for now reset these counters*/
-                tmem_remote_dedups = 0;
-                succ_tmem_remote_dedups = 0;
-                failed_tmem_remote_dedups = 0;
-                
-                /*
-                if(kthread_should_stop())
-                {
-                       pr_info(" *** mtp | 1.timed_fwd_filter thread"
-                               " stopped. jleft: %lu, secs left: %lu jleft "
-                               "| timed_fwd_filter *** \n",
-                               jleft, jleft/HZ);
-
-                       //__set_current_state(TASK_RUNNING);
-                       timed_fwd_filter_stopped = 1;
-
-                       return 0;
-                }
-                */
-
-                __set_current_state(TASK_RUNNING);
-
-                if(signal_pending(current))
-                {
-                       //__set_current_state(TASK_RUNNING);
-                       goto exit_timed_fwd_filter;
-                }
-
-                //__set_current_state(TASK_RUNNING);
-
-                if(tcp_client_fwd_filter(bflt) < 0)
-                {
-                        if(can_show(timed_fwd_filter))
-                                pr_info(" *** mtp | tcp_client_fwd_filter 2"
-                                        " attmepts failed |"
-                                        " timed_fwd_filter *** \n");
-                }
-
-                //check_remote_sharing_op();
-
-                set_current_state(TASK_INTERRUPTIBLE);
-
-                /*
-                if(kthread_should_stop())
-                {
-                       pr_info(" *** mtp | 2.timed_fwd_filter thread"
-                               " stopped. jleft: %lu, secs left: %lu jleft "
-                               "| timed_fwd_filter *** \n",
-                               jleft, jleft/HZ);
-
-                       timed_fwd_filter_stopped = 1;
-                       return 0;
-                }
-
-                if(signal_pending(current))
-                {
-                       goto exit_timed_fwd_filter;
-                }
-                */
-
-        }
-        __set_current_state(TASK_RUNNING);
-
-
-exit_timed_fwd_filter:
-
-        timed_fwd_filter_stopped = 1;
-        return 0;
-        //do_exit(0);
-}
 
 /*
 int start_fwd_filter(struct bloom_filter *bflt)

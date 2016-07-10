@@ -215,12 +215,13 @@ struct tmem_page_descriptor {
 struct tmem_system_view {
         struct rb_root pcd_tree_roots[256]; 
         struct radix_tree_root pcd_remote_tree_roots[256];
-        struct radix_tree_root pcd_remotified_tree_roots[256];
+        //struct radix_tree_root pcd_remotified_tree_roots[256];
         rwlock_t pcd_tree_rwlocks[256]; 
         rwlock_t pcd_remote_tree_rwlocks[256];
-        rwlock_t pcd_remotified_tree_rwlocks[256];
+        //rwlock_t pcd_remotified_tree_rwlocks[256];
         struct list_head remote_sharing_candidate_list;
         struct list_head local_only_list;
+	struct list_head remote_shared_list;
         //struct list_head pcd_preorder_stack;
         rwlock_t system_list_rwlock;
         //spinlock_t system_list_lock;
@@ -249,8 +250,20 @@ struct tmem_page_content_descriptor {
 	
         struct list_head system_rscl_pcds;
         struct list_head system_lol_pcds;
+	struct list_head system_rs_pcds;
         //struct list_head preorder_stack;
         char *remote_ip;
+	/* 
+	 * @remote_id can be the id of the remote page that you've remote
+	 * deduplicated this pcd page with; which is unique in the radix 
+	 * tree pcd_remote_tree_roots[firstbyte] at the remote machine.
+	 * 		OR
+	 * if this pcd page is being remote deduplicated by some remote machine
+	 * then @remote_id is the unique id in the corresponding radix tree
+	 * pcd_remote_tree_roots[firstbyte]. 
+	 *
+	 * hence it will never be both.
+	 */
         unsigned long remote_id;
         uint8_t firstbyte;
         //uint64_t pagehash;
