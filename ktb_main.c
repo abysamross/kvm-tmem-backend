@@ -22,7 +22,7 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aby Sam Ross");
 
 DEFINE_RWLOCK(id_rwlock);
-static int delay = 60;
+static int delay = 120;
 int bflt_bit_size = 268435456;
 //unsigned long pcd_remote_ids = 0;
 //unsigned long remote_tree_ids[256];
