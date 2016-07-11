@@ -7,6 +7,7 @@
 #include <linux/highmem.h>
 #include <asm/spinlock.h>
 #include "ktb.h"
+#include "network_tcp.h"
 
 /******************************************************************************/
 /*							   EXTERN DECLARATIONS*/
@@ -252,64 +253,45 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /******************************************************************************/
 
 /******************************************************************************/
-/*						     MAIN PCD & DEDUP ROUTINES*/
+/*					   MAIN PCD, REMOTIFY & DEDUP ROUTINES*/
 /******************************************************************************/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
-				       uint8_t firstbyte,
-				       unsigned long remote_id,
-				       struct remote_server *rs)
+				       uint8_t firstbyte, uint64_t remote_id,
+				       char *rs_ip)
 {
 	char *ip = NULL;
-        ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
-
-        /* 
-         * DOUBT: should I take a reference to the pcd->system_page that I am
-         * going to free up outside the lock, because memory freeing routines
-         * can sleep?
-         */ 
-        strcpy(ip, rs->rs_ip);
+	ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
+	strcpy(ip, rs_ip);
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-
-	pcd->status = 2;
-
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
 	 * this should never happen.
 	 */
 	BUG_ON(pcd->remote_ip != NULL);
 	BUG_ON(pcd->system_page == NULL);
+	/* enusring status == 0*/
 	BUG_ON(pcd->status == 1);
 	BUG_ON(pcd->status == 2);
 
-        //if((pcd->remote_ip == NULL) && (pcd->system_page != NULL))
-
-		/*
-        else if(pcd->remote_ip != NULL)
-                kfree(pcd->remote_ip);
-		*/
-
+	pcd->status = 2;
 	pcd->remote_ip = ip;
 	pcd->remote_id = remote_id;
 
 	write_lock(&(tmem_system.system_list_rwlock));
-
 	/* should be an rscl pcd and nothing else*/
 	BUG_ON(list_empty(&pcd->system_rscl_pcds));
-
 	/* 
 	 * add this to the remote shared list;
 	 * from now this page is available only in system_rs_pcds list
 	 */
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
-			list_del_init(&pcd->system_rscl_pcds); 
-			list_add_tail(&pcd->system_rs_pcds,\
-				      &(tmem_system.remote_shared_list));
+		list_del_init(&pcd->system_rscl_pcds); 
+		list_add_tail(&pcd->system_rs_pcds,\
+			      &(tmem_system.remote_shared_list));
 	}
-
 	//__free_page(pcd->system_page);
-
 	/* delete this pcd from the rbtree pcd_tree_roots[firstbyte]*/
 	rb_erase(&pcd->pcd_rb_tree_node,\
 		 &(tmem_system.pcd_tree_roots[firstbyte]));
@@ -318,15 +300,16 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+	/* free the pcd->system_page as it is now remotified */
 	__free_page(pcd->system_page);
 }
 
 int tmem_remotified_copy_to_client(struct page *client_page,\
-			       struct tmem_page_content_descriptor *pcd)
+			           struct tmem_page_content_descriptor *pcd)
 {
 	uint8_t firstbyte;
         int ret = -1;
-	unsigned long remote_id;
+	uint64_t remote_id;
         void *vaddr;
 	char *remote_ip;
         struct page *page = NULL;
@@ -338,11 +321,11 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         if(page == NULL)
                 goto exit_remote;
 
-	read_lock(&(tmem_system.system_list_lock));
+	read_lock(&(tmem_system.system_list_rwlock));
 	remote_id = pcd->remote_id;	
 	remote_ip = pcd->remote_ip;	
 	firstbyte = pcd->firstbyte;
-	read_unlock(&(tmem_system.system_list_lock));
+	read_unlock(&(tmem_system.system_list_rwlock));
 
         ret = 
 	ktb_remotified_get_page(page, remote_ip, firstbyte, remote_id); 
@@ -352,7 +335,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 
 	ret = tmem_copy_to_client(client_page, page);
 
-        __free(page);
+        __free_page(page);
 
 exit_remote:
 
@@ -363,53 +346,49 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
                             struct tmem_page_descriptor *pgp)
 {
 	uint8_t firstbyte = pgp->firstbyte;
-	int ret;
+	int ret = 0;
 	struct tmem_page_content_descriptor *pcd;
 
 	ASSERT(kvm_tmem_dedup_enabled);
 
 	read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-
 	pcd = pgp->pcd;
-
 	/*
-	ret = tmem_copy_to_client(cmfn, pcd->pfp, tmem_cli_buf_null);
-        if(pcd->system_page != NULL && pcd->remote_ip == NULL)
+	   ret = tmem_copy_to_client(cmfn, pcd->pfp, tmem_cli_buf_null);
+	   if(pcd->system_page != NULL && pcd->remote_ip == NULL)
 	*/
 	if(pcd->status == 0 || pcd->status == 1)
 	{
-	        ret = tmem_copy_to_client(client_page, pcd->system_page);
+		ret = tmem_copy_to_client(client_page, pcd->system_page);
 		read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	}
-        //else if(pcd->system_page == NULL && pcd->remote_ip != NULL)
+	//else if(pcd->system_page == NULL && pcd->remote_ip != NULL)
 	else if(pcd->status == 2)
 	{
 		read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-                ret = tmem_remotified_copy_to_client(client_page, pcd);
+		ret = tmem_remotified_copy_to_client(client_page, pcd);
 	}
 
 	return ret;
 }
 
 
-int pcd_add_to_remote_tree(int8_t firstbyte, unsigned long id,\
+int pcd_add_to_remote_tree(int8_t firstbyte, uint64_t id,\
                            struct tmem_page_content_descriptor *pcd)
 {
-        int ret = -1;
-        struct radix_tree_root *tree_root;
+	int ret = -1;
+	//unsigned long index = (unsigned long)id;
+	struct radix_tree_root *tree_root;
 
-        write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-
-        tree_root = &(tmem_system.pcd_remote_tree_roots[firstbyte]);
-
+	write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+	tree_root = &(tmem_system.pcd_remote_tree_roots[firstbyte]);
 	ret = radix_tree_insert(tree_root, id, pcd);
+	write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 
-        write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-
-        return ret;
+	return ret;
 }
 
-int pcd_remote_associate(struct page *remote_page, unsigned long *id)
+int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 {
 	uint8_t firstbyte;
 	int ret = 0;
@@ -418,20 +397,15 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 	struct rb_node **new, *parent = NULL;
 	struct rb_root *root;
 	struct tmem_page_content_descriptor *pcd = NULL;
-        //uint64_t pghash;
-
+	//uint64_t pghash;
 	if(!kvm_tmem_dedup_enabled)
 		return 0;
-
 	firstbyte = tmem_get_first_byte(remote_page);
-    	//pghash = tmem_page_hash(pgp->tmem_page);
-
+	//pghash = tmem_page_hash(pgp->tmem_page);
 	ASSERT(firstbyte < 256);
-
 	tmem_page_size = PAGE_SIZE;
 	//Not really sure whether the below assert is required or not
 	ASSERT(!(tmem_page_size & (sizeof(uint64_t)-1)));
-
 	//Accessing the pcd rb trees
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	root = &(tmem_system.pcd_tree_roots[firstbyte]);
@@ -439,37 +413,33 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 
 	tmem_dedups++;
 	tmem_remote_dedups++;
-
-    /*
-	if(can_show(pcd_associate))
-		pr_info(" *** mtp | Looking to de-duplicate page with index: "
-			"%u of object: %llu %llu %llu rooted at rb_tree slot: "
-			"%u of pool: %u of client: %u, having firstbyte: %u | "
-			"pcd_associate *** \n",
-			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
-			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
-			pgp->obj->pool->pool_id,
-			pgp->obj->pool->associated_client->client_id, firstbyte);
-    */
-
+	/*
+	   if(can_show(pcd_associate))
+	   pr_info(" *** mtp | Looking to de-duplicate page with index: "
+	   "%u of object: %llu %llu %llu rooted at rb_tree slot: "
+	   "%u of pool: %u of client: %u, having firstbyte: %u | "
+	   "pcd_associate *** \n",
+	   pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
+	   pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
+	   pgp->obj->pool->pool_id,
+	   pgp->obj->pool->associated_client->client_id, firstbyte);
+	   */
 	if(can_show(pcd_remote_associate))
 		pr_info(" *** mtp | Looking to de-duplicate remote page having"
 			" firstbyte: %u | pcd_remote_associate *** \n",
 			firstbyte);
-
-	while ( *new )
+	while(*new)
 	{
 		pcd = container_of(*new, struct tmem_page_content_descriptor,\
 				   pcd_rb_tree_node);
-
 		parent = *new;
-
 		//compare new entry and rb_tree entry, set cmp accordingly
 		ASSERT(remote_page != NULL);
 		ASSERT(pcd->system_page != NULL);
+		BUG_ON(remote_page == NULL);
+		BUG_ON(pcd->system_page == NULL);
 
 		cmp = tmem_page_cmp(remote_page, pcd->system_page);
-
 		//walk tree or match depending on cmp
 		if ( cmp < 0 )
 		{
@@ -482,41 +452,38 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 		/*
 		if(pghash < pcd->pagehash)
 		{
-			new = &((*new)->rb_left);
+		new = &((*new)->rb_left);
 		}
 		else if(pghash > pcd->pagehash)
 		{
-			new = &((*new)->rb_right);
+		new = &((*new)->rb_right);
 		}
 		*/
 		else
 		{
+			BUG_ON(pcd->status == 2);
 			BUG_ON(pcd->remote_ip != NULL);
-
-                        /*
-                        if(pcd->system_page == NULL && pcd->remote_ip != NULL)
-                        {
-			        new = &((*new)->rb_left);
-                                continue;
-                        }
-
-                        BUG_ON(pcd->system_page == NULL);
-
-		        cmp = tmem_page_cmp(pgp->tmem_page, pcd->system_page);
-
-                        if(cmp != 0)
-                        {
-			        new = &((*new)->rb_left);
-                                continue;
-                        }
-                        */
-                        /*
-			if(can_show(pcd_remote_associate))
-				pr_info(" *** mtp | Got a match to de-duplicate"
-					" remote page having firstbyte: %u |"
-                                        " pcd_remote_associate *** \n",
-					firstbyte);
-                        */
+			/*
+			   if(pcd->system_page == NULL && pcd->remote_ip != NULL)
+			   {
+			   new = &((*new)->rb_left);
+			   continue;
+			   }
+			   BUG_ON(pcd->system_page == NULL);
+			   cmp = tmem_page_cmp(pgp->tmem_page, pcd->system_page);
+			   if(cmp != 0)
+			   {
+			   new = &((*new)->rb_left);
+			   continue;
+			   }
+			*/
+			/*
+			   if(can_show(pcd_remote_associate))
+			   pr_info(" *** mtp | Got a match to de-duplicate"
+			   " remote page having firstbyte: %u |"
+			   " pcd_remote_associate *** \n",
+			   firstbyte);
+			   */
 			if(can_show(pcd_remote_associate))
 				pr_info(" *** mtp | Got a match to de-duplicate"
 					" remote page. Local page index: %u"
@@ -530,9 +497,8 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 					pcd->pgp->obj->oid.oid[0],
 					tmem_oid_hash(&(pcd->pgp->obj->oid)),
 					pcd->pgp->obj->pool->pool_id,
-			pcd->pgp->obj->pool->associated_client->client_id,
+					pcd->pgp->obj->pool->associated_client->client_id,
 					firstbyte);
-
 			/* 
 			 * this pcd is alreay associated to a remote page.
 			 */
@@ -541,20 +507,19 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 				*id = pcd->remote_id;
 				goto match;
 			}
-
 			//write_lock(&id_rwlock);
-
-			pcd->remote_id = remote_tree_ids[firstbyte];
+			/* else, give new remote id */
+			pcd->remote_id = tmem_system.remote_tree_ids[firstbyte];
 			*id = pcd->remote_id;
-
 			//write_unlock(&id_rwlock);
-
+			/* 
+			 * change status to remote pcd, i.e. being accessed by
+			 * remote machine
+			 */
 			pcd->status = 1;
-
 			ret = 
 			pcd_add_to_remote_tree(pcd->firstbyte, pcd->remote_id,\
 					       pcd);
-
 			if(ret != 0)
 			{
 				ret = -1;
@@ -564,10 +529,13 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 			}
 			else
 			{
-				++remote_tree_ids[firstbyte];
+				/* 
+				 * increment and keep ready remote_id of
+				 * this tree for next remote association. 
+				 */
+				++tmem_system.remote_tree_ids[firstbyte];
 				goto match;
 			}
-			
 			/* 
 			 * NOTE: we are not incrementing the pcd->refcount for a
 			 * remote association, because we do not want a remote
@@ -576,17 +544,16 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 			 */
 		}
 	}
-
-        ret = -1;
-        //tmem_free_page();
-        //__free_page(remote_page);
-        failed_tmem_dedups++;
-        failed_tmem_remote_dedups++;
+	ret = -1;
+	//tmem_free_page();
+	//__free_page(remote_page);
+	failed_tmem_dedups++;
+	failed_tmem_remote_dedups++;
 
 	if(can_show(pcd_remote_associate))
 		pr_info(" *** mtp | Found no match to de-duplicate remote "
-			"page having firstbyte: %u | "
-			"pcd_remote_associate *** \n", firstbyte);
+			"page having firstbyte: %u | pcd_remote_associate "
+			"*** \n", firstbyte);
 	/*
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);
@@ -596,23 +563,22 @@ int pcd_remote_associate(struct page *remote_page, unsigned long *id)
 	*/
 match:
 	/* 
-	 * if the matched pcd is a unique pcd then move it to
-	 * lol list.
+	 * If the matched pcd is a unique pcd then move it to lol list.
+	 * lol list. Hence even a remote association will result in a pcd 
+	 * being put to local_only_list because you don't want this pcd to
+	 * remotified anymore...obviously as you are already allowing a remote
+	 * machine to share it. You wouldn't want to upset that guy would you?
 	 */
 	write_lock(&(tmem_system.system_list_rwlock));
-
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
 		list_del_init(&pcd->system_rscl_pcds); 
 		list_add_tail(&pcd->system_lol_pcds,\
 			      &(tmem_system.local_only_list));
 	}
-
 	write_unlock(&(tmem_system.system_list_rwlock));
-
 	succ_tmem_dedups++;
 	succ_tmem_remote_dedups++;
-
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	__free_page(remote_page);
@@ -850,7 +816,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 
 	struct tmem_page_content_descriptor *pcd = pgp->pcd;
 	struct page* system_page = NULL;
-    	char *ip = NULL; 
+	char *ip = NULL; 
 	uint16_t firstbyte = pgp->firstbyte;
 	//uint32_t pcd_size = pcd->size;
 	//uint32_t pgp_size = pgp->size;
@@ -859,9 +825,10 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	ASSERT(firstbyte < 256);
 
 	if(pgp->pcd->system_page != NULL)
-			system_page = pgp->pcd->system_page;
+		system_page = pgp->pcd->system_page;
+	/* if it is a remotified pcd */
 	if(pgp->pcd->remote_ip != NULL)
-			ip = pgp->pcd->remote_ip;
+		ip = pgp->pcd->remote_ip;
 	//if(have_pcd_rwlock)
 	//ASSERT_WRITELOCK(&pcd_tree_rwlocks[firstbyte]);
 	//else
@@ -870,12 +837,11 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	pgp->pcd = NULL;
 	pgp->firstbyte = NOT_SHAREABLE;
 	pgp->size = -1;
-
 	/*
-	If more pgps are referring this pcd then you return from here itself
-        Also then this pcd is certainly in local_only_list and you shouldn't
-        remove it from this list.
-	*/
+	   If more pgps are referring this pcd then you return from here itself
+	   Also then this pcd is certainly in local_only_list and you shouldn't
+	   remove it from this list.
+	   */
 	if (--pcd->pgp_ref_count)
 	{
 		if(can_show(pcd_disassociate))
@@ -903,42 +869,38 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	}
 
 	if(can_show(pcd_disassociate))
-                pr_info(" *** mtp | Diassociating page with index: %u of object:"
-                        " %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
-                        " of client: %u, having firstbyte: %u from it's page"
-                        " content descriptor (NO MORE REF TO THIS PAGE) |"
-                        " pcd_disassociate *** \n",
+		pr_info(" *** mtp | Diassociating page with index: %u of object:"
+			" %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
+			" of client: %u, having firstbyte: %u from it's page"
+			" content descriptor (NO MORE REF TO THIS PAGE) |"
+			" pcd_disassociate *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 			pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id, firstbyte);
-
 	/*
-         * no more references to this pcd, recycle it and the physical page.
-         * also this pcd can be either in remote_sharing_candidate_list or
-         * local_only_list
-         */
-
+	 * no more references to this pcd, recycle it and the physical page.
+	 * also this pcd can be either in remote_sharing_candidate_list or
+	 * local_only_list
+	 */
 	write_lock(&(tmem_system.system_list_rwlock));
 
 	if(!list_empty(&pcd->system_rscl_pcds))
-			list_del_init(&pcd->system_rscl_pcds);
+		list_del_init(&pcd->system_rscl_pcds);
 	else if(!list_empty(&pcd->system_lol_pcds))
-			list_del_init(&pcd->system_lol_pcds);
-
+		list_del_init(&pcd->system_lol_pcds);
+	else if(!list_empty(&pcd->system_rs_pcds))
+		list_del_init(&pcd->system_rs_pcds);
 	//write_unlock(&(tmem_system.system_list_rwlock));
-	
 	/*
 	 * if this pcd is being accessed by some remote machine
 	 */
 	if(pcd->status == 1)
 	{
 		write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-
-		pgp = 
+		pcd = 
 		radix_tree_delete(&(tmem_system.pcd_remote_tree_roots[firstbyte])
 				  ,pcd->remote_id);
-
 		write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 	}
 
@@ -1020,7 +982,7 @@ int tmem_copy_to_client(struct page* client_page, struct page* page)
 {
 	//map tmem_page and cli_page to va-s and do memcpy
 	unsigned long *tmem_va, *client_va;
-	int ret = 1;
+	int ret = 0;
 
 	//check if tmem_page is already mapped !!
 	//if it is already mapped then we need only map client_page
@@ -1033,20 +995,28 @@ int tmem_copy_to_client(struct page* client_page, struct page* page)
 
 	ASSERT(tmem_va);
 	if(tmem_va == NULL)
-		return -1;
+	{
+		ret = -1;
+		goto bad_copy;
+	}
 
 	//client_va = page_address(client_page);
 	client_va = kmap_atomic(client_page);
 
 	ASSERT(client_va);
 	if(client_va == NULL)
-		return -1;
+	{
+		ret = -1;
+		goto bad_copy;
+	}
 
 	if(!memcpy(client_va, tmem_va, PAGE_SIZE))
 		ret = -1;
 
 	kunmap_atomic(client_va);
         smp_mb();
+
+bad_copy:
 	return ret;
 }
 

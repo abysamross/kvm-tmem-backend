@@ -50,16 +50,16 @@ int debug_receive_bflt = 0;
 int debug_connection_handler = 0;
 int debug_tcp_server_accept = 0;
 int debug_tcp_server_listen = 0;
-int debug_timed_fwd_filter = 0;
 int debug_tcp_server_start = 0;
-
+int debug_get_remote_page = 0;
+/*
 int debug_tcp_client_send = 0;
 int debug_tcp_client_receive = 0;
 int debug_tcp_client_snd_page = 0;
 int debug_tcp_client_fwd_filter = 0;
 int debug_tcp_client_connect_rs = 0;
 int debug_tcp_client_connect = 0;
-
+*/
 int show_msg_tcp_server_send = 0;
 int show_msg_tcp_server_receive = 0;
 int show_msg_compare_page = 0;
@@ -73,30 +73,34 @@ int show_msg_receive_bflt = 0;
 int show_msg_connection_handler = 0;
 int show_msg_tcp_server_accept = 0;
 int show_msg_tcp_server_listen = 0;
-int show_msg_timed_fwd_filter = 0;
 int show_msg_tcp_server_start = 0;
-
+int show_msg_get_remote_page = 0;
+/*
 int show_msg_tcp_client_send = 0;
 int show_msg_tcp_client_receive = 0;
 int show_msg_tcp_client_snd_page = 0;
 int show_msg_tcp_client_fwd_filter = 0;
 int show_msg_tcp_client_connect_rs = 0;
 int show_msg_tcp_client_connect = 0;
-
+*/
 //int bit_size = 268435456;
-int delay = 120;
+//int delay = 120;
 int tcp_listener_stopped = 0;
 int tcp_listener_started = 0;
 int tcp_acceptor_stopped = 0;
 int tcp_acceptor_started = 0;
 int timed_fwd_filter_stopped = 0;
 
+/*
 extern void *test_page_vaddr;
 extern struct page *test_page;
-extern int pcd_remote_associate(struct page*);
 extern int tmem_remote_dedups;
 extern int succ_tmem_remote_dedups;
 extern int failed_tmem_remote_dedups;
+*/
+extern int pcd_remote_associate(struct page *, uint64_t *);
+extern int ktb_remote_get(struct page *, uint8_t, uint64_t);
+extern int ktb_remotify_puts(void);
 //struct task_struct *fwd_bflt_thread = NULL;
 /*
 struct bloom_filter *bflt = NULL;
@@ -216,7 +220,6 @@ read_again:
 
         vec.iov_len = left;
         vec.iov_base = (char *)(buf + totread);
-
         /*
         if(!skb_queue_empty(&sock->sk->sk_receive_queue))
                 pr_info("recv queue empty ? %s \n",
@@ -225,7 +228,12 @@ read_again:
         len = kernel_recvmsg(sock, &msg, &vec, size, size, flags);
 
         if(len == -EAGAIN || len == -ERESTARTSYS)
+	{
+		if(can_debug(tcp_server_receive))
+                        pr_info(" *** mtp | error while reading: %d | "
+                                "tcp_server_receive *** \n", len);
                 goto read_again;
+	}
         
         if(huge)
         {
@@ -315,21 +323,20 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 {
 	uint8_t firstbyte;
         int ret = 0, len = 49, i = 0;
-        char in_msg[len+1];
+        //char in_msg[len+1];
         char out_msg[len+1];
-        void *vaddr;
-        void *new_page_vaddr;
+        //void *vaddr;
+        //void *new_page_vaddr;
 	char *tmp;
-        struct socket *conn_socket; 
+        //struct socket *conn_socket; 
         struct page *new_page = NULL;
-	unsigned long id;
+	uint64_t id;
 
         new_page = alloc_page(GFP_ATOMIC);
 	/*
         new_page_vaddr = page_address(new_page);
         memset(new_page_vaddr, 0, PAGE_SIZE);
 	*/
-
         if(new_page == NULL)
 	{
 		memset(out_msg, 0, len+1);                                        
@@ -341,12 +348,11 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 	for(i = 0; i < 4; i++)
 	{
 		tmp = strsep(&(conn->in_buf), ":");
-
 		if(i == 2)
 			kstrtou8(tmp, 10, &firstbyte);
 		/*
 		if(i == 3)
-			kstrtou64(tmp, 10, &id);
+			kstrtou64(tmp, 10, &cd);
 		*/
 	}
 
@@ -354,14 +360,15 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 
         if(can_show(get_remote_page))
 		pr_info(" *** mtp | client looking for RGET:PAGE"
-			" with firstbyte: %u, id: %lu | get_remote_page"
+			" with firstbyte: %u, id: %llu | get_remote_page"
 			" ***\n", firstbyte, id);                           
 
+	/* look up pcd_remote_tree_roots[firstbyte] */
 	ret = ktb_remote_get(new_page, firstbyte, id);
 
         if(can_show(get_remote_page))
 		pr_info(" *** mtp | client sending response for RGET:PAGE"
-			" with firstbyte: %u, id: %lu | get_remote_page"
+			" with firstbyte: %u, id: %llu | get_remote_page"
 			" ***\n", firstbyte, id);                           
 
 	if(ret < 0)
@@ -371,7 +378,7 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 
 		if(can_show(get_remote_page))
 			pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
-				" id: %lu PAGE NOT FOUND | get_remote_page ***\n",
+				" id: %llu PAGE NOT FOUND | get_remote_page ***\n",
 				firstbyte, id);                           
 
 		goto rget_fail_re;
@@ -394,29 +401,29 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 	{
 		if(can_show(get_remote_page))
 			pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
-				" id: %lu SUCCEEDED | get_remote_page ***\n",
+				" id: %llu SUCCEEDED | get_remote_page ***\n",
 				firstbyte, id);                           
 	}
 
-	return 0;
+	return;
 
 rget_fail:
 
 	if(can_show(get_remote_page))
 		pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
-			" id: %lu FAILED | get_remote_page ***\n",
+			" id: %llu FAILED | get_remote_page ***\n",
 			firstbyte, id);                           
 rget_fail_re:
 
 	ret = 
-	tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
+	tcp_server_send(conn->accept_socket, out_msg, strlen(out_msg), MSG_DONTWAIT);
 
-	return -1;
+	return;
 }
 
-int compare_page(struct page *new_page, unsigned long  *id)
+int compare_page(struct page *new_page, uint64_t *id)
 {
-        if(pcd_remote_associate(new_page, id))
+        if(pcd_remote_associate(new_page, id) < 0)
         {
                 if(can_show(compare_page))
                         pr_info(" *** mtp | page test FAILED |"
@@ -427,88 +434,92 @@ int compare_page(struct page *new_page, unsigned long  *id)
         {
                 if(can_show(compare_page))
                         pr_info(" *** mtp | page test SUCCEEDED."
-				" ID = %lu | compare_page ***\n",
+				" ID = %llu | compare_page ***\n",
 				*id);
                 return 0;
         }
 
 }
 
-int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, unsigned long *id)
+int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, uint64_t *id)
 {
-        int ret, len = 49;
-        //int i;
-        char out_buf[len+1];
-        //char *ip, *tmp;
-        struct page *new_page = NULL;
-        void *new_page_vaddr;
+	int ret, len = 49;
+	//int i;
+	char out_buf[len+1];
+	//char *ip, *tmp;
+	void *new_page_vaddr;
+	struct page *new_page = NULL;
 
-        new_page = alloc_page(GFP_ATOMIC);
+	new_page = alloc_page(GFP_ATOMIC);
 
-        if(new_page == NULL)
-                goto recv_page_fail;
+	if(new_page == NULL)
+		goto recv_page_fail;
 
-        new_page_vaddr = page_address(new_page);
-        memset(new_page_vaddr, 0, PAGE_SIZE);
+	new_page_vaddr = page_address(new_page);
+	memset(new_page_vaddr, 0, PAGE_SIZE);
 
-        /* 
-         * the lines above can be replaced by the following single line 
-         * new_page_vaddr = get_zeroed_page(GFP_ATOMIC);
-         */
+	/* 
+	 * the lines above can be replaced by the following single line 
+	 * new_page_vaddr = get_zeroed_page(GFP_ATOMIC);
+	 */
 
-        /*
-        ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
+	/*
+	   ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
 
-        for(i = 0; i < 3; i++)
-              tmp = strsep(&(conn->in_buf), ":");
+	   for(i = 0; i < 3; i++)
+	   tmp = strsep(&(conn->in_buf), ":");
 
-        strcpy(ip, tmp);
-        */
+	   strcpy(ip, tmp);
+	*/
 
-        /*
-        tmp = strsep(&(conn->in_buf), ":");
-        kstrtoint(tmp, 10, &port);
+	/*
+	   tmp = strsep(&(conn->in_buf), ":");
+	   kstrtoint(tmp, 10, &port);
 
-        tmp = strsep(&(conn->in_buf), ":");
-        kstrtoint(tmp, 10, &bmap_byte_size);
+	   tmp = strsep(&(conn->in_buf), ":");
+	   kstrtoint(tmp, 10, &bmap_byte_size);
 
-        bitmap = vmalloc(bmap_byte_size);
-        memset(bitmap, 0, bmap_byte_size);
-        */
+	   bitmap = vmalloc(bmap_byte_size);
+	   memset(bitmap, 0, bmap_byte_size);
+	*/
 
-        memset(out_buf, 0, len+1);
-        strcat(out_buf, "SEND:PAGE");
+	memset(out_buf, 0, len+1);
+	strcat(out_buf, "SEND:PAGE");
 
-        if(can_debug(rcv_and_cmp_page))
-                pr_info(" *** mtp | server[%d] sending response: %s for page"
-                        " of rs: %s | rcv_and_cmp_page ***\n",
-                        conn->thread_id, out_buf, conn->ip);
+	if(can_debug(rcv_and_cmp_page))
+		pr_info(" *** mtp | server[%d] sending response: %s for page"
+			" of rs: %s | rcv_and_cmp_page ***\n",
+			conn->thread_id, out_buf, conn->ip);
 
-        ret =
-        tcp_server_send(conn->accept_socket,(void *)out_buf,strlen(out_buf),\
-                        MSG_DONTWAIT);
+	ret =
+	tcp_server_send(conn->accept_socket,(void *)out_buf,strlen(out_buf),\
+			MSG_DONTWAIT);
+	/* 
+	 * chose not to have a wait queue here, as page receive is a huge
+	 * receive and tcp_server_receive won't return until it gets/issues 4096
+	 * kernel_recvmsg calls or it receives an explicit FAIL.
+	 */
+	ret = 
+	tcp_server_receive(conn->accept_socket, new_page_vaddr, PAGE_SIZE,\
+			   MSG_DONTWAIT, 1);
 
-        ret = 
-        tcp_server_receive(conn->accept_socket, new_page_vaddr, PAGE_SIZE,\
-                           MSG_DONTWAIT, 1);
+	if(can_debug(rcv_and_cmp_page))
+		pr_info(" *** mtp | server[%d] received page (size: %d) of"
+			" rs: [%s] | rcv_and_cmp_page ***\n",
+			conn->thread_id, ret, conn->ip);
 
-        if(can_debug(rcv_and_cmp_page))
-                pr_info(" *** mtp | server[%d] received page (size: %d) of"
-                        " rs: [%s] | rcv_and_cmp_page ***\n",
-                        conn->thread_id, ret, conn->ip);
+	if(ret != PAGE_SIZE)
+		goto recv_page_fail;
 
-        if(ret != PAGE_SIZE)
-                goto recv_page_fail;
+	//if(compare_page(new_page, new_page_vaddr) < 0)
+	if(compare_page(new_page, id) < 0)
+		goto recv_page_fail;
 
-        //if(compare_page(new_page, new_page_vaddr) < 0)
-        if(compare_page(new_page, id) < 0)
-                goto recv_page_fail;
-
-        return 0;
+	return 0;
 
 recv_page_fail:
 
-        return -1;
+	return -1;
 }
 //struct remote_server *register_rs(struct socket *socket, char* pkt,
 //                int id, struct sockaddr_in *address)
@@ -890,241 +901,240 @@ bflt_alloc_fail:
 
 int connection_handler(void *data)
 {
-       int ret;
-       int len = 49;
-       char in_buf[len+1];
-       char out_buf[len+1];
+	int ret;
+	int len = 49;
+	char in_buf[len+1];
+	char out_buf[len+1];
 
-       struct tcp_conn_handler_data *conn_data = 
-               (struct tcp_conn_handler_data *)data;
+	struct tcp_conn_handler_data *conn_data = 
+	(struct tcp_conn_handler_data *)data;
 
-       //struct sockaddr_in *address = conn_data->address;
-       struct socket *accept_socket = conn_data->accept_socket;
-       char *ip = conn_data->ip;
-       int port = conn_data->port;
-       int id = conn_data->thread_id;
-       DECLARE_WAITQUEUE(recv_wait, current);
+	//struct sockaddr_in *address = conn_data->address;
+	struct socket *accept_socket = conn_data->accept_socket;
+	char *ip = conn_data->ip;
+	int port = conn_data->port;
+	int id = conn_data->thread_id;
+	DECLARE_WAITQUEUE(recv_wait, current);
 
-       conn_data->in_buf = in_buf;
-       allow_signal(SIGKILL|SIGSTOP);
+	conn_data->in_buf = in_buf;
+	allow_signal(SIGKILL|SIGSTOP);
 
-       while(1)
-       {
-              add_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);  
+	while(1)
+	{
+		add_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);  
 
-              while(skb_queue_empty(&accept_socket->sk->sk_receive_queue))
-              {
-                      __set_current_state(TASK_INTERRUPTIBLE);
-                      schedule_timeout(HZ);
+		while(skb_queue_empty(&accept_socket->sk->sk_receive_queue))
+		{
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule_timeout(HZ);
 
-                      if(kthread_should_stop())
-                      {
-                              if(can_show(connection_handler))
-                                      pr_info(" *** mtp | tcp server handle"
-                                              " connection thread stopping"
-                                              " | connection_handler *** \n");
+			if(kthread_should_stop())
+			{
+				if(can_show(connection_handler))
+					pr_info(" *** mtp | tcp server handle"
+						" connection thread stopping"
+						" | connection_handler *** \n");
 
-                              //tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
+				//tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
 
-                              __set_current_state(TASK_RUNNING);
-                              remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
-                                                &recv_wait);
-                              tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
-                              kfree(tcp_conn_handler->data[id]->address);
-                              kfree(tcp_conn_handler->data[id]->ip);
-                              kfree(tcp_conn_handler->data[id]);
-                              //kfree(tmp);
-                              sock_release(tcp_conn_handler->data[id]->\
-                                           accept_socket);
-                              return 0;
-                      }
+				__set_current_state(TASK_RUNNING);
+				remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
+						&recv_wait);
+				tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
+				kfree(tcp_conn_handler->data[id]->address);
+				kfree(tcp_conn_handler->data[id]->ip);
+				kfree(tcp_conn_handler->data[id]);
+				//kfree(tmp);
+				sock_release(tcp_conn_handler->data[id]->\
+					     accept_socket);
+				return 0;
+			}
 
-                      if(signal_pending(current))
-                      {
-                              __set_current_state(TASK_RUNNING);
-                              remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
-                                              &recv_wait);
-                              goto out;
-                      }
-              }
-              __set_current_state(TASK_RUNNING);
-              remove_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);
+			if(signal_pending(current))
+			{
+				__set_current_state(TASK_RUNNING);
+				remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
+						  &recv_wait);
+				goto out;
+			}
+		}
+		__set_current_state(TASK_RUNNING);
+		remove_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);
 
-              if(can_show(connection_handler))
-                      pr_info(" *** mtp | server[%d] receiving message | "
-                              "connection_handler ***\n", id);
+		if(can_show(connection_handler))
+			pr_info(" *** mtp | server[%d] receiving message | "
+				"connection_handler ***\n", id);
 
-              memset(in_buf, 0, len+1);
-              //ret = tcp_server_receive(accept_socket, id, address, in_buf, len,
-              //                         MSG_DONTWAIT);
-              ret = tcp_server_receive(accept_socket, (void *)in_buf, len,\
-                                       MSG_DONTWAIT, 0);
+		memset(in_buf, 0, len+1);
+		//ret = tcp_server_receive(accept_socket, id, address, in_buf, len,
+		//                         MSG_DONTWAIT);
+		ret = tcp_server_receive(accept_socket, (void *)in_buf, len,\
+					 MSG_DONTWAIT, 0);
 
-              if(can_show(connection_handler))
-                      pr_info(" *** mtp | server[%d] received: %d bytes from"
-                              " %s:%d, says: %s | connection_handler ***\n",
-                              id, ret, ip, port, in_buf);
+		if(can_show(connection_handler))
+			pr_info(" *** mtp | server[%d] received: %d bytes from"
+				" %s:%d, says: %s | connection_handler ***\n",
+				id, ret, ip, port, in_buf);
 
-              if(ret > 0)
-              {
-                      if(memcmp(in_buf, "RECV", 4) == 0)
-                      {
-                              if(memcmp(in_buf+5, "BFLT", 4) == 0)
-                              {
+		if(ret > 0)
+		{
+			if(memcmp(in_buf, "RECV", 4) == 0)
+			{
+				if(memcmp(in_buf+5, "BFLT", 4) == 0)
+				{
 
-                                      conn_data->in_buf = in_buf;
-                                      if(receive_bflt(conn_data) < 0)
-                                              goto bfltfail;
+					conn_data->in_buf = in_buf;
+					if(receive_bflt(conn_data) < 0)
+						goto bfltfail;
 
-                                      //unused_old_update_bflt(rs);
-                                      
-                                      memset(out_buf, 0, len+1);
-                                      strcat(out_buf, "DONE:BFLT");
-                                      goto bfltresp;
+					//unused_old_update_bflt(rs);
+
+					memset(out_buf, 0, len+1);
+					strcat(out_buf, "DONE:BFLT");
+					goto bfltresp;
 bfltfail:
-                                      memset(out_buf, 0, len+1);
-                                      strcat(out_buf, "FAIL:BFLT");
+					memset(out_buf, 0, len+1);
+					strcat(out_buf, "FAIL:BFLT");
 bfltresp:
-                                      if(can_show(connection_handler))
-                                              pr_info(" *** mtp | sending"
-                                                      " response: %s |"
-                                                      " connection_handler"
-                                                      " ***\n",
-                                                      out_buf);
+					if(can_show(connection_handler))
+						pr_info(" *** mtp | sending"
+							" response: %s |"
+							" connection_handler"
+							" ***\n",
+							out_buf);
 
-                                      tcp_server_send(accept_socket, out_buf,\
-                                                      strlen(out_buf),\
-                                                      MSG_DONTWAIT);
+					tcp_server_send(accept_socket, out_buf,\
+							strlen(out_buf),\
+							MSG_DONTWAIT);
 
-                                      if(can_show(connection_handler))
-                                           pr_info(" *** mtp | sending test"
-                                                   " page | "
-                                                   "connection_handler *** \n");
+					if(can_show(connection_handler))
+						pr_info(" *** mtp | sending test"
+							" page | "
+							"connection_handler *** \n");
 
-                                      if(memcmp(out_buf, "DONE:BFLT", 9) == 0)
-                                      {
-                                              if(ktb_remotify_put_pages() < 0)
-                                                      break;
-                                      }
-                                      /*
-                                      if(test_page != NULL)
-                                              snd_page(test_page);
-                                       */
-                              }
-                              else if(memcmp(in_buf+5, "PAGE", 4) == 0)
-                              {
-                                      /* 
-                                       * do comparison of this page in 
-                                       * the tmem bknd. Give response.
-                                       */
-                                      unsigned long id;
-                                      conn_data->in_buf = in_buf;
-                                      if(rcv_and_cmp_page(conn_data,&id)<0)
-                                              goto pagefail;
+					if(memcmp(out_buf, "DONE:BFLT", 9) == 0)
+					{
+						if(ktb_remotify_puts() < 0)
+							break;
+					}
+					/*
+					   if(test_page != NULL)
+					   snd_page(test_page);
+					   */
+				}
+				else if(memcmp(in_buf+5, "PAGE", 4) == 0)
+				{
+					/* 
+					 * do comparison of this page in 
+					 * the tmem bknd. Give response.
+					 */
+					uint64_t id;
+					conn_data->in_buf = in_buf;
+					if(rcv_and_cmp_page(conn_data,&id)<0)
+						goto pagefail;
 
-                                      memset(out_buf, 0, len+1);
-                                      //strcat(out_buf, "FNDS:PAGE");
-				      snprintf(out_buf, sizeof(out_buf),\
-					       "FNDS:PAGE:%lu", id);
-                                      goto pageresp;
+					memset(out_buf, 0, len+1);
+					//strcat(out_buf, "FNDS:PAGE");
+					snprintf(out_buf, sizeof(out_buf),\
+						 "FNDS:PAGE:%llu", id);
+					goto pageresp;
 pagefail:
-                                      memset(out_buf, 0, len+1);
-                                      strcat(out_buf, "FAIL:PAGE");
+					memset(out_buf, 0, len+1);
+					strcat(out_buf, "FAIL:PAGE");
 pageresp: 
-                                      tcp_server_send(accept_socket, out_buf,\
-                                                      strlen(out_buf),\
-                                                      MSG_DONTWAIT);
-                              }
-                      }
-		      else if(memcmp(in_buf, "RGET", 4) == 0)
-		      {
-			      conn_data->in_buf = in_buf;
-			      get_remote_page(conn_data);
-		      }
-                      else if(memcmp(in_buf, "QUIT", 4) == 0)
-                      {
-                              conn_data->in_buf = in_buf;
-                              drop_connection(conn_data);
-                      
-                      }
-                      /* this is aplicable only to the thread handling connection
-                       * to the leader */
-                      else if(memcmp(in_buf, "ADIOS", 5) == 0)
-                      {
-                              int r = 1;
+					tcp_server_send(accept_socket, out_buf,\
+							strlen(out_buf),\
+							MSG_DONTWAIT);
+				}
+			}
+			else if(memcmp(in_buf, "RGET", 4) == 0)
+			{
+				conn_data->in_buf = in_buf;
+				get_remote_page(conn_data);
+			}
+			else if(memcmp(in_buf, "QUIT", 4) == 0)
+			{
+				conn_data->in_buf = in_buf;
+				drop_connection(conn_data);
 
-                              memset(out_buf, 0, len+1);
+			}
+			/* this is aplicable only to the thread handling connection
+			 * to the leader */
+			else if(memcmp(in_buf, "ADIOS", 5) == 0)
+			{
+				int r = 1;
 
-                              strcat(out_buf, "ADIOSAMIGO");
+				memset(out_buf, 0, len+1);
+				strcat(out_buf, "ADIOSAMIGO");
 
-                              if(can_show(connection_handler))
-                                      pr_info(" *** mtp | sending response: %s"
-                                              " | connection_handler ***\n",
-                                              out_buf);
+				if(can_show(connection_handler))
+					pr_info(" *** mtp | sending response: %s"
+						" | connection_handler ***\n",
+						out_buf);
 
-                              tcp_server_send(accept_socket, out_buf,\
-                                              strlen(out_buf), MSG_DONTWAIT);
-                              /* here also the local client connection 
-                               * with the leader server should be severed.
-                               * Not only that, the entire local server 
-                               * module should be brought down as there is
-                               * no longer a leader server */
-                              mutex_lock(&timed_ff_mutex);
-                              if(fwd_bflt_thread != NULL)
-                              {
-                                      if(!timed_fwd_filter_stopped)
-                                      {
-                                              r = kthread_stop(fwd_bflt_thread);
+				tcp_server_send(accept_socket, out_buf,\
+						strlen(out_buf), MSG_DONTWAIT);
+				/* here also the local client connection 
+				 * with the leader server should be severed.
+				 * Not only that, the entire local server 
+				 * module should be brought down as there is
+				 * no longer a leader server */
+				mutex_lock(&timed_ff_mutex);
+				if(fwd_bflt_thread != NULL)
+				{
+					if(!timed_fwd_filter_stopped)
+					{
+						r = kthread_stop(fwd_bflt_thread);
 
-                                              if(!r)
-                                              {
-                                                      if(fwd_bflt_thread != NULL)
-                                                              put_task_struct(\
-                                                              fwd_bflt_thread);
+						if(!r)
+						{
+							if(fwd_bflt_thread != NULL)
+								put_task_struct(\
+								fwd_bflt_thread);
 
-                                                     timed_fwd_filter_stopped=1;
+							timed_fwd_filter_stopped=1;
 
-                                                     if(\
-                                                     can_show(connection_handler))
-                                                     {
-                                                             pr_info(" *** mtp"
-                                                                     " | timed"
-                                                                     " forward"
-                                                                     " filter"
-                                                                     " thread"
-                                                                     " stopped |"
-                                                                     "connection_"
-                                                                     " handler"
-                                                                     " *** \n");
-                                                     }
-                                              }
-                                      }
-                              }
-                              mutex_unlock(&timed_ff_mutex);
+							if(can_show(\
+							   connection_handler))
+							{
+								pr_info(" *** mtp"
+									" | timed"
+									" forward"
+									" filter"
+									" thread"
+									" stopped |"
+									"connection_"
+									" handler"
+									" *** \n");
+							}
+						}
+					}
+				}
+				mutex_unlock(&timed_ff_mutex);
 
-                              if(cli_conn_socket)
-                              {
-                                      if(can_show(connection_handler))
-                                              pr_info(" *** mtp | 1. Closing"
-                                                      " client connection |"
-                                                      " connection_handler"
-                                                      " *** \n");
-                                      tcp_client_exit();
-                              }
-                              
-                              break;
-                      }
-              }
-       }
+				if(cli_conn_socket)
+				{
+					if(can_show(connection_handler))
+						pr_info(" *** mtp | 1. Closing"
+							" client connection |"
+							" connection_handler"
+							" *** \n");
+					tcp_client_exit();
+				}
+
+				break;
+			}
+		}
+	}
 out:
-       tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
-       kfree(tcp_conn_handler->data[id]->address);
-       kfree(tcp_conn_handler->data[id]->ip);
-       kfree(tcp_conn_handler->data[id]);
-       //kfree(tmp);
-       sock_release(tcp_conn_handler->data[id]->accept_socket);
-       //tcp_conn_handler->thread[id] = NULL;
-       do_exit(0);
+	tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
+	kfree(tcp_conn_handler->data[id]->address);
+	kfree(tcp_conn_handler->data[id]->ip);
+	kfree(tcp_conn_handler->data[id]);
+	//kfree(tmp);
+	sock_release(tcp_conn_handler->data[id]->accept_socket);
+	//tcp_conn_handler->thread[id] = NULL;
+	do_exit(0);
 }
 
 int tcp_server_accept(void)
@@ -1565,21 +1575,13 @@ int network_server_init(void)
         show_msg(tcp_server_start); 
         show_msg(receive_bflt); 
         */
-
         show_msg(compare_page);
-        show_msg(timed_fwd_filter); 
-
-        debug(compare_page);
-        debug(timed_fwd_filter); 
         /*
         show_msg(rcv_and_cmp_page);
-        show_msg(tcp_client_send);
-        show_msg(tcp_client_receive); 
-        show_msg(tcp_client_connect_rs); 
-        show_msg(tcp_client_connect); 
-        show_msg(tcp_client_snd_page); 
-        show_msg(tcp_client_fwd_filter); 
+	*/
 
+        debug(compare_page);
+	/*
         debug(tcp_server_send);
         debug(tcp_server_receive);
         debug(rcv_and_cmp_page);
@@ -1594,16 +1596,6 @@ int network_server_init(void)
         debug(tcp_server_listen); 
         debug(tcp_server_start); 
         */
-
-        /*
-        debug(tcp_client_send);
-        debug(tcp_client_receive); 
-        debug(tcp_client_snd_page); 
-        debug(tcp_client_fwd_filter); 
-        debug(tcp_client_connect_rs); 
-        debug(tcp_client_connect); 
-        */
-
         return 0;
 }
 

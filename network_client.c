@@ -18,19 +18,21 @@
 
 struct socket *cli_conn_socket = NULL;
 
-extern int debug_tcp_client_send;
-extern int debug_tcp_client_receive;
-extern int debug_tcp_client_snd_page;
-extern int debug_tcp_client_fwd_filter;
-extern int debug_tcp_client_connect_rs;
-extern int debug_tcp_client_connect;
+int show_msg_tcp_client_send;
+int show_msg_tcp_client_receive;
+int show_msg_tcp_client_snd_page;
+int show_msg_tcp_client_fwd_filter;
+int show_msg_tcp_client_connect_rs;
+int show_msg_tcp_client_connect;
+int show_msg_tcp_client_remotified_get;
 
-extern int show_msg_tcp_client_send;
-extern int show_msg_tcp_client_receive;
-extern int show_msg_tcp_client_snd_page;
-extern int show_msg_tcp_client_fwd_filter;
-extern int show_msg_tcp_client_connect_rs;
-extern int show_msg_tcp_client_connect;
+int debug_tcp_client_send;
+int debug_tcp_client_receive;
+int debug_tcp_client_snd_page;
+int debug_tcp_client_fwd_filter;
+int debug_tcp_client_connect_rs;
+int debug_tcp_client_connect;
+int debug_tcp_client_remotified_get;
 
 u32 create_address(u8 *ip)
 {
@@ -132,35 +134,36 @@ repeat_send:
         return written ? written:len;
 }
 
-int tcp_client_receive(struct socket *sock, char *str, unsigned long flags)
+//int tcp_client_receive(struct socket *sock, char *str, unsigned long flags)
+int tcp_client_receive(struct socket *sock, void *rcv_buf, int size,\
+                       unsigned long flags, int huge)
 {
-        //mm_segment_t oldmm;
+        int len = 0, totread = 0, left = size, count = size;
         struct msghdr msg;
-        //struct iovec iov;
         struct kvec vec;
-        int len;
-        int max_size = 50;
+	char *buf = NULL;
+
+        if(sock==NULL)
+                return -1;
+
+        buf = (char *)rcv_buf;
 
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
-        /*
-        msg.msg_iov     = &iov;
-        msg.msg_iovlen  = 1;
-        */
         msg.msg_control = NULL;
         msg.msg_controllen = 0;
         msg.msg_flags   = flags;
-        /*
-        msg.msg_iov->iov_base   = str;
-        msg.msg_ioc->iov_len    = max_size; 
-        */
-        vec.iov_len = max_size;
-        vec.iov_base = str;
 
-        //oldmm = get_fs(); set_fs(KERNEL_DS);
 read_again:
-        //len = sock_recvmsg(sock, &msg, max_size, 0); 
-        len = kernel_recvmsg(sock, &msg, &vec, max_size, max_size, flags);
+
+        vec.iov_len = left;
+        vec.iov_base = (char *)(buf + totread);
+        /*
+        if(!skb_queue_empty(&sock->sk->sk_receive_queue))
+                pr_info("recv queue empty ? %s \n",
+                        skb_queue_empty(&sock->sk->sk_receive_queue)?"yes":"no");
+        */
+        len = kernel_recvmsg(sock, &msg, &vec, size, size, flags);
 
         if(len == -EAGAIN || len == -ERESTARTSYS)
         {
@@ -171,23 +174,59 @@ read_again:
                 goto read_again;
         }
 
+        if(huge)
+        {
+                /* 
+                 * you should timeout somehow if you cannot get the entire 
+                 * page rather than simply looping around.
+                 */
+                /*
+                 * count and comparison of buf with "FAIL"|"ADIOS" are ugly ways
+                 * of ensuring that a huge receive, page(4KB),
+                 * doesn't loop forever.
+                 * comparison with "FAIL" is to safeguard against the other end
+                 * not being able to send entire size.
+                 * count is to safeguard against an ungraceful exit of the other
+                 * end.
+                 */
+                if(count < 0)
+                        goto recv_out;
+
+                count--;
+
+                if(len > 0)
+                {
+                        //pr_info("len: %d\n", len);
+                        if((len == 4) && (memcmp(buf+totread, "FAIL", 4) == 0))
+                                goto recv_out;
+                        totread += len;
+                        //pr_info("total read: %d\n", totread);
+                        left -= len;
+                        //pr_info("left: %d\n", left);
+                        if(left)
+                                goto read_again;
+                }
+        }
+
+recv_out:
+
         if(can_show(tcp_client_receive))
-                pr_info(" *** mtp | the server says: %s |"
-                        " tcp_client_receive *** \n",str);
-        //set_fs(oldmm);
-        return len;
+                pr_info(" *** mtp | return from receive after reading total: "
+                        "%d bytes, last read: %d bytes | tcp_client_receive \n", 
+                        totread, len);
+        return totread?totread:len;
 }
 
 int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
-			      uint8_t firstbyte, unsigned long remote_id)
+			      uint8_t firstbyte, uint64_t remote_id)
 {
         int ret = 0, len = 49;
-        char in_msg[len+1];
+        //char in_msg[len+1];
         char out_msg[len+1];
         void *page_vaddr;
         struct socket *conn_socket; 
 
-        DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
+        //DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
 
         conn_socket = rs->lcc_socket;
 	page_vaddr = page_address(page);
@@ -195,190 +234,190 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 
         if(can_show(tcp_client_remotified_get))
 		pr_info(" *** mtp | client sending RGET:PAGE to: %s for page"
-			" having firstbyte: %u, remote index: %lu |"
+			" having firstbyte: %u, remote index: %llu |"
 			" tcp_client_remotified_get ***\n", 
 			rs->rs_ip, firstbyte, remote_id);                           
 
         memset(out_msg, 0, len+1);                                        
-        snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%lu",\
+        snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%llu",\
 		 firstbyte, remote_id);
-
         tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
-        
-rget_wait_label:
+	/* 
+	 * chose not to have a wait queue here, as page receive is a huge
+	 * receive and tcp_client_receive won't return until it gets/issues 4096
+	 * kernel_recvmsg calls or it receives an explicit FAIL.
+	 */
 
+	/*
         wait_event_timeout(rget_wait,\
                            !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
                            10*HZ);   
 
         if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
         {
+	*/
                 if(can_show(tcp_client_remotified_get))
                         pr_info(" *** mtp | client receiving message | "
                                 "tcp_client_remotified_get ***\n");                           
-
 		ret = 
 		tcp_client_receive(conn_socket, page_vaddr, PAGE_SIZE,\
 				   MSG_DONTWAIT, 1);
-
                 if(can_show(tcp_client_remotified_get))
                         pr_info(" *** mtp | client received: %d bytes | "
-                                "tcp_client_remotified_get ***\n", ret);
-        
+                                "tcp_client_remotified_get ***\n", ret);                           
 		if(ret != PAGE_SIZE)
 			goto rget_fail;
-
 		if(can_show(tcp_client_remotified_get))
 			pr_info(" *** mtp | RGET:PAGE to: %s for page having"
-				" firstbyte: %u, remote index: %lu SUCCESS |"
+				" firstbyte: %u, remote index: %llu SUCCESS |"
 				" tcp_client_remotified_get ***\n", rs->rs_ip,
 				firstbyte, remote_id);                           
+	/*
         }
         else                                                              
                 goto rget_fail;                                                  
-
+	*/
         return 0;
 
 rget_fail:
-
 	if(can_show(tcp_client_remotified_get))
 		pr_info(" *** mtp | RGET:PAGE to: %s for page having"
-			" firstbyte: %u, remote index: %lu FAILED |"
+			" firstbyte: %u, remote index: %llu FAILED |"
 			" tcp_client_remotified_get ***\n", rs->rs_ip,
 			firstbyte, remote_id);                           
-
          return -1;
 }
 
 int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
-			unsigned long *remote_id)
+			uint64_t *remote_id)
 {
-        int ret = 0, len = 49;
-        char in_msg[len+1];
-        char out_msg[len+1];
-        void *vaddr;
-        struct socket *conn_socket; 
+	int ret = 0, len = 49;
+	char in_msg[len+1];
+	char out_msg[len+1];
+	void *vaddr;
+	struct socket *conn_socket; 
 
-        DECLARE_WAIT_QUEUE_HEAD(page_wait);                               
+	DECLARE_WAIT_QUEUE_HEAD(page_wait);                               
 
-        conn_socket = rs->lcc_socket;
+	conn_socket = rs->lcc_socket;
 
-        if(can_show(tcp_client_snd_page))
-                pr_info(" *** mtp | client sending RECV:PAGE to: %s | "
-                        "tcp_client_snd_page ***\n", rs->rs_ip);                           
+	if(can_show(tcp_client_snd_page))
+		pr_info(" *** mtp | client sending RECV:PAGE to: %s | "
+			"tcp_client_snd_page ***\n", rs->rs_ip);                           
 
-        memset(out_msg, 0, len+1);                                        
+	memset(out_msg, 0, len+1);                                        
+	snprintf(out_msg, sizeof(out_msg), "RECV:PAGE");
+	tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
 
-        snprintf(out_msg, sizeof(out_msg), "RECV:PAGE");
-
-        tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
-        
 snd_page_wait:
 
-        wait_event_timeout(page_wait,\
-                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                           10*HZ);   
+	wait_event_timeout(page_wait,\
+			   !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+			   10*HZ);   
 
-        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
-        {
-                if(can_show(tcp_client_snd_page))
-                        pr_info(" *** mtp | client receiving message | "
-                                "tcp_client_snd_page ***\n");                           
+	if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
+	{
+		if(can_show(tcp_client_snd_page))
+			pr_info(" *** mtp | client receiving message | "
+				"tcp_client_snd_page ***\n");                           
 
-                memset(in_msg, 0, len+1);                                 
+		memset(in_msg, 0, len+1);                                 
 
-                ret = tcp_client_receive(conn_socket, in_msg, MSG_DONTWAIT); 
+		ret = 
+		tcp_client_receive(conn_socket, (void *)in_msg, len,\
+				   MSG_DONTWAIT, 0); 
 
-                if(can_show(tcp_client_snd_page))
-                        pr_info(" *** mtp | client received: %d bytes | "
-                                "tcp_client_snd_page ***\n", ret);
-        
-                if(ret > 0)                                              
-                {
-                        if(memcmp(in_msg, "SEND", 4) == 0)
-                        {
-                                if(memcmp(in_msg+5, "PAGE", 4) == 0)
-                                {
-                                        vaddr = page_address(page);
+		if(can_show(tcp_client_snd_page))
+			pr_info(" *** mtp | client received: %d bytes | "
+				"tcp_client_snd_page ***\n", ret);
 
-                                        /*
-                                        ret = 
-                                        tcp_client_send(conn_socket, vaddr,\
-                                                        PAGE_SIZE,MSG_DONTWAIT,1);
-                                        */
-                                        ret = 
-                                        kernel_sendpage(conn_socket, page, 0,\
-                                                        PAGE_SIZE, MSG_DONTWAIT);
+		if(ret > 0)                                              
+		{
+			if(memcmp(in_msg, "SEND", 4) == 0)
+			{
+				if(memcmp(in_msg+5, "PAGE", 4) == 0)
+				{
+					vaddr = page_address(page);
 
-                                        if(ret != PAGE_SIZE)
-                                        {
-                                                msleep(5000);
-                                                memset(out_msg, 0, len+1);        
-                                                strcat(out_msg, "FAIL");
-                                                ret = 
-                                                tcp_client_send(conn_socket,\
-                                                                out_msg,\
-                                                                strlen(out_msg),\
-                                                                MSG_DONTWAIT, 0);
-                                                goto page_fail;
-                                        }
+					/*
+					ret = 
+					tcp_client_send(conn_socket, vaddr,\
+					PAGE_SIZE,MSG_DONTWAIT,1);
+					*/
+					ret = 
+					kernel_sendpage(conn_socket, page, 0,\
+							PAGE_SIZE, MSG_DONTWAIT);
 
-                                        if(can_show(tcp_client_snd_page))
-                                                pr_info(" *** mtp | page"
-                                                        " send to: %s |"
-                                                        " tcp_client_snd_page"
-                                                        " *** \n",
-                                                        rs->rs_ip);
+					if(ret != PAGE_SIZE)
+					{
+						msleep(5000);
+						memset(out_msg, 0, len+1);        
+						strcat(out_msg, "FAIL");
+						ret = 
+						tcp_client_send(conn_socket,\
+								out_msg,\
+								strlen(out_msg),\
+								MSG_DONTWAIT, 0);
+						goto snd_page_fail;
+					}
 
-                                        goto snd_page_wait;
-                                }
-                        }
-                        else if(memcmp(in_msg, "FNDS", 4) == 0)
-                        {
-                                if(memcmp(in_msg+5, "PAGE", 4) == 0)
-                                {
+					if(can_show(tcp_client_snd_page))
+						pr_info(" *** mtp | page"
+							" send to: %s |"
+							" tcp_client_snd_page"
+							" *** \n",
+							rs->rs_ip);
+
+					goto snd_page_wait;
+				}
+			}
+			else if(memcmp(in_msg, "FNDS", 4) == 0)
+			{
+				if(memcmp(in_msg+5, "PAGE", 4) == 0)
+				{
 					int i = 0;
+					char *p = in_msg;
 					char *tmp;
 					//extract remote_id here.
 					for(i = 0; i < 3; i++)
-						tmp = strsep(&in_msg, ":");
-					
-                			kstrtou64(tmp, 10, remote_id);
-                                        //if(can_show(tcp_client_snd_page))
-                                        pr_info(" *** mtp | SUCCESS: page "
-                                                "found at: %s with ID: %lu| "
-                                                "tcp_client_snd_page *** \n",
-                                                rs->rs_ip, *remote_id);
-                                }
-                        }
-                        else if(memcmp(in_msg, "FAIL", 4) == 0)
-                        {
-                                if(memcmp(in_msg+5, "PAGE", 4) == 0)
-                                {
-                                        //if(can_show(tcp_client_snd_page))
-                                        pr_info(" *** mtp | FAIL: page "
-                                                "not found at: %s | "
-                                                "tcp_client_snd_page *** \n", rs->rs_ip);
-                                }
-                        }
-                        else
-                                goto page_fail;
-                }
-        }
-        else                                                              
-        {                                                                  
-                //if(can_show(tcp_client_snd_page))
-                pr_info(" *** mtp | client RECV:PAGE:%s failed | "
-                        "tcp_client_snd_page ***\n", rs->rs_ip);
+						tmp = strsep(&p, ":");
 
-                goto page_fail;                                                  
-        }
+					kstrtou64(tmp, 10, remote_id);
+					//if(can_show(tcp_client_snd_page))
+					pr_info(" *** mtp | SUCCESS: page "
+						"found at: %s with ID: %llu| "
+						"tcp_client_snd_page *** \n",
+						rs->rs_ip, *remote_id);
+				}
+			}
+			else if(memcmp(in_msg, "FAIL", 4) == 0)
+			{
+				if(memcmp(in_msg+5, "PAGE", 4) == 0)
+				{
+					//if(can_show(tcp_client_snd_page))
+					pr_info(" *** mtp | FAIL: page "
+						"not found at: %s | "
+						"tcp_client_snd_page *** \n", rs->rs_ip);
+				}
+			}
+			else
+				goto snd_page_fail;
+		}
+	}
+	else                                                              
+	{                                                                  
+		//if(can_show(tcp_client_snd_page))
+		pr_info(" *** mtp | client RECV:PAGE:%s FAILED | "
+			"tcp_client_snd_page ***\n", rs->rs_ip);
 
-        return 0;
+		goto snd_page_fail;
+	}
 
-page_fail:
+	return 0;
 
-         return -1;
+snd_page_fail:
+
+	return -1;
 }
 
 int tcp_client_fwd_filter(struct bloom_filter *bflt)
@@ -441,7 +480,9 @@ fwd_bflt_wait:
 
                 memset(in_msg, 0, len+1);                                 
 
-                ret = tcp_client_receive(cli_conn_socket, in_msg, MSG_DONTWAIT); 
+                ret = 
+		tcp_client_receive(cli_conn_socket, (void *)in_msg, len,\
+				   MSG_DONTWAIT, 0); 
 
                 if(can_show(tcp_client_fwd_filter))
                         pr_info(" *** mtp | client received: %d bytes | "
@@ -763,8 +804,9 @@ int tcp_client_connect(void)
 
                         memset(in_msg, 0, len+1);
 
-                        ret=tcp_client_receive(cli_conn_socket, in_msg,\
-                                               MSG_DONTWAIT);
+                        ret=
+			tcp_client_receive(cli_conn_socket, (void *)in_msg,\
+                                           len, MSG_DONTWAIT, 0);
 
                         if(ret > 0)
                         {
@@ -821,6 +863,24 @@ err:
 int tcp_client_init(void)
 {
         pr_info(" *** mtp | network client init | network_client_init *** \n");
+
+	/*
+        show_msg(tcp_client_send);
+        show_msg(tcp_client_receive); 
+        show_msg(tcp_client_connect_rs); 
+        show_msg(tcp_client_connect); 
+        show_msg(tcp_client_snd_page); 
+        show_msg(tcp_client_fwd_filter); 
+	*/
+
+        /*
+        debug(tcp_client_send);
+        debug(tcp_client_receive); 
+        debug(tcp_client_snd_page); 
+        debug(tcp_client_fwd_filter); 
+        debug(tcp_client_connect_rs); 
+        debug(tcp_client_connect); 
+        */
         return tcp_client_connect();
         //return 0;
 }
@@ -851,7 +911,7 @@ void tcp_client_exit(void)
         if(!skb_queue_empty(&cli_conn_socket->sk->sk_receive_queue))
         {
                 memset(&response, 0, len+1);
-                tcp_client_receive(cli_conn_socket, response, MSG_DONTWAIT);
+                tcp_client_receive(cli_conn_socket, (void *)response, len, MSG_DONTWAIT, 0);
                 //remove_wait_queue(&cli_conn_socket->sk->sk_wq->wait,&exit_wait);
         }
 

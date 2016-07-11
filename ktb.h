@@ -213,6 +213,7 @@ struct tmem_page_descriptor {
 /*		 	      End KTB pool object PAGE related data structures*/
 /******************************************************************************/
 struct tmem_system_view {
+	uint64_t remote_tree_ids[256];
         struct rb_root pcd_tree_roots[256]; 
         struct radix_tree_root pcd_remote_tree_roots[256];
         //struct radix_tree_root pcd_remotified_tree_roots[256];
@@ -264,7 +265,7 @@ struct tmem_page_content_descriptor {
 	 *
 	 * hence it will never be both.
 	 */
-        unsigned long remote_id;
+        uint64_t remote_id;
         uint8_t firstbyte;
         //uint64_t pagehash;
 	//struct list_head pgp_list;
@@ -294,6 +295,8 @@ extern struct kmem_cache* tmem_object_nodes_cachep;
 /*my bloom filter related*/
 extern struct bloom_filter* tmem_system_bloom_filter;
 
+/*ktb functions*/
+extern int ktb_remotified_get_page(struct page*, char*, uint8_t, uint64_t);
 /*tmem pool functions*/
 extern void tmem_new_pool(struct tmem_pool* , uint32_t );
 extern void tmem_flush_pool(struct tmem_pool*, int);
@@ -333,13 +336,18 @@ extern int tmem_copy_to_client(struct page* client_page, struct page* page);
 extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 
 /*main remote dedup function*/
-extern int pcd_remote_associate(struct page*);
+extern int pcd_remote_associate(struct page*, uint64_t*);
+
+/*update status of remotified page*/
+void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor*,\
+				       uint8_t, uint64_t, char*);
+
 /*custom radix_tree_destroy function*/
 //bool  __radix_tree_delete_node(struct radix_tree_root*,struct radix_tree_node*);
 //void* indirect_to_ptr(void *);
 
 /*list functions*/
-extern void update_summary(struct tmem_page_descriptor*);
+extern void update_bflt(struct tmem_page_content_descriptor*);
 
 /*
 //tcp server
