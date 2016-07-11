@@ -398,10 +398,15 @@ snd_page_wait:
 					pr_info(" *** mtp | FAIL: page "
 						"not found at: %s | "
 						"tcp_client_snd_page *** \n", rs->rs_ip);
+
+					goto snd_page_fail;
 				}
+				//goto snd_page_fail;
 			}
 			else
+			{
 				goto snd_page_fail;
+			}
 		}
 	}
 	else                                                              

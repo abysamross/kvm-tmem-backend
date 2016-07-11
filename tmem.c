@@ -265,9 +265,11 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
-        /* in case there was a race at ktb_remotify_puts */
+        /* in case there was a race at ktb_remotify_puts
         if(pcd->status == 2)
                 goto getout;
+	*/
+
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
 	 * this should never happen.
@@ -282,13 +284,13 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	pcd->remote_ip = ip;
 	pcd->remote_id = remote_id;
 
-	write_lock(&(tmem_system.system_list_rwlock));
 	/* should be an rscl pcd and nothing else*/
 	BUG_ON(list_empty(&pcd->system_rscl_pcds));
 	/* 
 	 * add this to the remote shared list;
 	 * from now this page is available only in system_rs_pcds list
 	 */
+	write_lock(&(tmem_system.system_list_rwlock));
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
 		list_del_init(&pcd->system_rscl_pcds); 
@@ -303,11 +305,11 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
 
 	write_unlock(&(tmem_system.system_list_rwlock));
-getout:
+//getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	/* free the pcd->system_page as it is now remotified */
-        if(pcd->system_page != NULL)
-                __free_page(pcd->system_page);
+        //if(pcd->system_page != NULL)
+        __free_page(pcd->system_page);
 }
 
 int tmem_remotified_copy_to_client(struct page *client_page,\
