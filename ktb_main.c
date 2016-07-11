@@ -892,12 +892,13 @@ int ktb_remotify_puts(void)
                         vaddr2 = page_address(pcd->system_page);
                         memcpy(vaddr1, vaddr2, PAGE_SIZE);
 
-                        pr_info(" *** mtp | details of pcd to be remotified."
-                                " firstbyte: %u, status: %d, remote_ip: %s,"
-                                " remote_id: %llu, sys_page: %s |"
-                                " ktb_remotify_puts ***\n", pcd->firstbyte,
-                                pcd->status, pcd->remote_ip, pcd->remote_id,
-                                (pcd->system_page == NULL)?"NULL":"NOT NULL");
+                        if(can_debug(ktb_remotify_puts))
+                                pr_info(" *** mtp | details of pcd to be remotified."
+                                        " firstbyte: %u, status: %d, remote_ip: %s,"
+                                        " remote_id: %llu, sys_page: %s |"
+                                        " ktb_remotify_puts ***\n", pcd->firstbyte,
+                                        pcd->status, pcd->remote_ip, pcd->remote_id,
+                                        (pcd->system_page == NULL)?"NULL":"NOT NULL");
 
                         read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                         read_unlock(&(tmem_system.system_list_rwlock));
