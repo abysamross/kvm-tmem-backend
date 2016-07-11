@@ -372,7 +372,6 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
 	return ret;
 }
 
-
 int pcd_add_to_remote_tree(int8_t firstbyte, uint64_t id,\
                            struct tmem_page_content_descriptor *pcd)
 {
