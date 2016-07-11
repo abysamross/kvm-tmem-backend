@@ -264,6 +264,10 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	strcpy(ip, rs_ip);
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+
+        /* in case there was a race at ktb_remotify_puts */
+        if(pcd->status == 2)
+                goto getout;
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
 	 * this should never happen.
@@ -299,9 +303,11 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
 
 	write_unlock(&(tmem_system.system_list_rwlock));
+getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	/* free the pcd->system_page as it is now remotified */
-	__free_page(pcd->system_page);
+        if(pcd->system_page != NULL)
+                __free_page(pcd->system_page);
 }
 
 int tmem_remotified_copy_to_client(struct page *client_page,\

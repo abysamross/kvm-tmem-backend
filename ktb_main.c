@@ -892,6 +892,13 @@ int ktb_remotify_puts(void)
                         vaddr2 = page_address(pcd->system_page);
                         memcpy(vaddr1, vaddr2, PAGE_SIZE);
 
+                        pr_info(" *** mtp | details of pcd to be remotified."
+                                " firstbyte: %u, status: %d, remote_ip: %s,"
+                                " remote_id: %llu, sys_page: %s |"
+                                " ktb_remotify_puts ***\n", pcd->firstbyte,
+                                pcd->status, pcd->remote_ip, pcd->remote_id,
+                                (pcd->system_page == NULL)?"NULL":"NOT NULL");
+
                         read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                         read_unlock(&(tmem_system.system_list_rwlock));
 
@@ -908,7 +915,7 @@ int ktb_remotify_puts(void)
                                                         pr_info(" *** mtp | checking for rscl object"
                                                                 " in bloom filter failed |"
                                                                 " ktb_remotify_puts *** \n");
-                                }
+                                        }
 
                                         if(bloom_res == true)
                                         {
@@ -1868,7 +1875,7 @@ static int __init ktb_main_init(void)
 
                         INIT_LIST_HEAD(&(tmem_system.remote_sharing_candidate_list));
                         INIT_LIST_HEAD(&(tmem_system.local_only_list));
-                        INIT_LIST_HEAD(&(tmem_system.remote_sharing_candidate_list));
+                        INIT_LIST_HEAD(&(tmem_system.remote_shared_list));
 
                         rwlock_init(&(tmem_system.system_list_rwlock));
                         //INIT_LIST_HEAD(&(tmem_system.pcd_preorder_stack));
