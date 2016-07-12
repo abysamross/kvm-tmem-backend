@@ -2117,15 +2117,15 @@ static int __init ktb_main_init(void)
         //-------------------------
         /*
            debug(pcd_associate);
-           debug(pcd_disassociate);
            debug(tmem_pgp_free);
-           debug(tmem_pgp_free_data);
            debug(tmem_pgp_destroy);
            debug(tmem_pool_destroy_objs);
            debug(custom_radix_tree_destroy);
            debug(custom_radix_tree_node_destroy);
            debug(pcd_add_to_remote_tree);
         */
+        debug(tmem_pgp_free_data);
+        debug(pcd_disassociate);
         debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
@@ -2168,11 +2168,11 @@ static int __init ktb_main_init(void)
         //-------------------------
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
+        show_msg(tmem_pgp_free_data);
         /*
            show_msg(pcd_add_to_remote_tree);
            show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free);
-           show_msg(tmem_pgp_free_data);
            show_msg(tmem_pgp_destroy);
            show_msg(tmem_pool_destroy_objs);
            show_msg(custom_radix_tree_destroy);

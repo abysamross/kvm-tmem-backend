@@ -1119,11 +1119,12 @@ void tmem_pgp_free_data(struct tmem_page_descriptor *pgp)
 
 	if(can_show(tmem_pgp_free_data))
 		pr_info(" *** mtp | freeing data of pgp of page with index: %u, "
-			"of object: %llu %llu %llu in pool: %d, of client: %d "
-			"| tmem_pgp_free_data *** \n",
+			"of object: %llu %llu %llu in pool: %d, of client: %d, "
+			"having firstbyte: %u | tmem_pgp_free_data *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], pgp->obj->pool->pool_id,
-			pgp->obj->pool->associated_client->client_id);
+			pgp->obj->pool->associated_client->client_id,
+			pgp->firstbyte);
 
 	if(kvm_tmem_dedup_enabled && pgp->firstbyte != NOT_SHAREABLE)
                 pcd_disassociate(pgp,0);
