@@ -257,7 +257,7 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /******************************************************************************/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 				       uint8_t firstbyte, uint64_t remote_id,
-				       char *rs_ip)
+				       char *rs_ip, bool *rdedup)
 {
 	char *ip = NULL;
 	ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
@@ -265,10 +265,11 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
-        /* in case there was a race at ktb_remotify_puts
-        if(pcd->status == 2)
+        /* in case there was a race at ktb_remotify_puts and
+         * pcd_remote_associate
+         */
+        if(pcd->status == 1)
                 goto getout;
-	*/
 
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
@@ -277,7 +278,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	BUG_ON(pcd->remote_ip != NULL);
 	BUG_ON(pcd->system_page == NULL);
 	/* enusring status == 0*/
-	BUG_ON(pcd->status == 1);
+	//BUG_ON(pcd->status == 1);
 	BUG_ON(pcd->status == 2);
 
 	pcd->status = 2;
@@ -303,13 +304,18 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 		 &(tmem_system.pcd_tree_roots[firstbyte]));
 	//reinit the struct for safety for now
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
+        *rdedup = true;
 
 	write_unlock(&(tmem_system.system_list_rwlock));
-//getout:
+getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-	/* free the pcd->system_page as it is now remotified */
+	/* 
+         * free the pcd->system_page as it is now remotified.
+         * better not to free pcd->system_page here as you are within a mutex.
+         * why?
+         */
         //if(pcd->system_page != NULL)
-        __free_page(pcd->system_page);
+        //__free_page(pcd->system_page);
 }
 
 int tmem_remotified_copy_to_client(struct page *client_page,\

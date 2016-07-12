@@ -685,8 +685,8 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | No such client possible: "
-                                "%d | ktb_get_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "%d | ktb_get_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -694,9 +694,9 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_get_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_get_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -708,18 +708,18 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s, %s, %d | Client: %d doesn't have"
-                                " a valid POOL | ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        " a valid POOL | ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | Searching for object: %llu %llu %llu at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n",
-                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n",
+                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         obj = tmem_obj_find(pool,oidp);
 
@@ -727,18 +727,18 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s, %s, %d | object: %llu %llu %llu "
-                                "does not exist | ktb_get_page*** \n",
-                                __FILE__, __func__, __LINE__,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0]);
+                                        "does not exist | ktb_get_page*** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0]);
                 goto out;
         }
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | object: %llu %llu %llu found at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n",
-                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n",
+                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         ASSERT_SPINLOCK(&obj->obj_spinlock);
         pgp = tmem_pgp_delete_from_obj(obj, index);
@@ -747,12 +747,12 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | could not delete ktb pgp "
-                                "for index: %u, object: %llu %llu %llu, rooted "
-                                "at rb_tree slot: %u of pool: %u of client: %u "
-                                "| ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__, index,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "for index: %u, object: %llu %llu %llu, rooted "
+                                        "at rb_tree slot: %u of pool: %u of client: %u "
+                                        "| ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__, index,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 spin_unlock(&obj->obj_spinlock);
                 goto out;
@@ -774,11 +774,11 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | copied contents of index: %u, object: "
-                        "%llu %llu %llu having firstbyte: %u, rooted at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n", index, oidp->oid[2], oidp->oid[1],
-                        oidp->oid[0], pgp->firstbyte, oidp_hash, pool->pool_id,
-                        client->client_id);
+                                "%llu %llu %llu having firstbyte: %u, rooted at "
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n", index, oidp->oid[2], oidp->oid[1],
+                                oidp->oid[0], pgp->firstbyte, oidp_hash, pool->pool_id,
+                                client->client_id);
 
         tmem_pgp_delist_free(pgp);
         //tmem_pgp_free(pgp);
@@ -800,20 +800,20 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | Index: %u, Object:  "
-                                " %llu %llu %llu rooted at rb_tree slot: %u of "
-                                "pool: %u of client: %u destroyed | "
-                                "ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        " %llu %llu %llu rooted at rb_tree slot: %u of "
+                                        "pool: %u of client: %u destroyed | "
+                                        "ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
         }
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | Successfully served page at index: %u, "
-                        "object: %llu %llu %llu rooted at rb_tree slot: %u of "
-                        "pool: %u of client: %u | ktb_get_page *** \n",
-                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "object: %llu %llu %llu rooted at rb_tree slot: %u of "
+                                "pool: %u of client: %u | ktb_get_page *** \n",
+                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         succ_tmem_gets++;
         return 0;
@@ -871,123 +871,121 @@ int ktb_remotify_puts(void)
 
         if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
         {
-        	read_unlock(&(tmem_system.system_list_rwlock));
-			return 1;
-		}
+                read_unlock(&(tmem_system.system_list_rwlock));
+                return 1;
+        }
 
-		list_for_each_entry_safe(pcd, nexpcd,\
-								 &(tmem_system.remote_sharing_candidate_list),\
-						         system_rscl_pcds)
-		{
-        	bool bloom_res;
-        	//bool rdedup = false;
-			uint8_t firstbyte;
-			struct remote_server *rs;
-			struct page *pg = alloc_page(GFP_ATOMIC);
-			void *vaddr1, *vaddr2;
-			uint64_t remote_id;
+        list_for_each_entry_safe(pcd, nexpcd,\
+                        &(tmem_system.remote_sharing_candidate_list),\
+                        system_rscl_pcds)
+        {
+                bool bloom_res;
+                bool rdedup = false;
+                uint8_t firstbyte;
+                struct remote_server *rs;
+                struct page *pg = alloc_page(GFP_ATOMIC);
+                void *vaddr1, *vaddr2;
+                uint64_t remote_id;
 
-			count++;
+                count++;
 
-			vaddr1 = page_address(pg);
-			memset(vaddr1, 0, PAGE_SIZE);
-			firstbyte = tmem_get_first_byte(pcd->system_page);
+                vaddr1 = page_address(pg);
+                memset(vaddr1, 0, PAGE_SIZE);
+                firstbyte = tmem_get_first_byte(pcd->system_page);
 
-			read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
-			vaddr2 = page_address(pcd->system_page);
-			memcpy(vaddr1, vaddr2, PAGE_SIZE);
+                vaddr2 = page_address(pcd->system_page);
+                memcpy(vaddr1, vaddr2, PAGE_SIZE);
 
-			if(can_debug(ktb_remotify_puts))
-				pr_info(" *** mtp | details of pcd to be remotified."
-						" firstbyte: %u, status: %d, remote_ip: %s,"
-						" remote_id: %llu, sys_page: %s |"
-						" ktb_remotify_puts ***\n", pcd->firstbyte,
-						pcd->status, pcd->remote_ip, pcd->remote_id,
-						(pcd->system_page == NULL)?"NULL":"NOT NULL");
+                if(can_debug(ktb_remotify_puts))
+                        pr_info(" *** mtp | details of pcd to be remotified."
+                                " firstbyte: %u, status: %d, remote_ip: %s,"
+                                " remote_id: %llu, sys_page: %s |"
+                                " ktb_remotify_puts ***\n", pcd->firstbyte,
+                                pcd->status, pcd->remote_ip, pcd->remote_id,
+                                (pcd->system_page == NULL)?"NULL":"NOT NULL");
 
-			read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-			read_unlock(&(tmem_system.system_list_rwlock));
+                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                read_unlock(&(tmem_system.system_list_rwlock));
 
-			//read_lock(&rs_rwspinlock);
-			down_read(&rs_rwmutex);
-			if((list_empty(&rs_head)))
-			{
-				up_read(&rs_rwmutex);
-				return 1;
-			}
+                //read_lock(&rs_rwspinlock);
+                down_read(&rs_rwmutex);
+                if((list_empty(&rs_head)))
+                {
+                        up_read(&rs_rwmutex);
+                        return 1;
+                }
 
-			list_for_each_entry(rs, &(rs_head), rs_list)
-			{
-				if(bloom_filter_check(rs->rs_bflt, &firstbyte, 1,\
-							          &bloom_res) < 0)
-				{
-					if(can_show(ktb_remotify_puts))
-						pr_info(" *** mtp | checking for rscl object"
-								" in bloom filter failed |"
-								" ktb_remotify_puts *** \n");
-				}
+                list_for_each_entry(rs, &(rs_head), rs_list)
+                {
+                        if(bloom_filter_check(rs->rs_bflt, &firstbyte, 1,\
+                                                &bloom_res) < 0)
+                        {
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info(" *** mtp | checking for rscl object"
+                                                        " in bloom filter failed |"
+                                                        " ktb_remotify_puts *** \n");
+                        }
 
-				if(bloom_res == true)
-				{
-					if(can_show(ktb_remotify_puts))
-						pr_info(" *** mtp | the rscl object IS PRESENT in"
-								" BFLT of RS: %s | ktb_remotify_puts *** \n",
-								rs->rs_ip);
+                        if(bloom_res == true)
+                        {
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info(" *** mtp | the rscl object IS PRESENT in"
+                                                        " BFLT of RS: %s | ktb_remotify_puts *** \n",
+                                                        rs->rs_ip);
 
-					/**/
-					if(tcp_client_snd_page(rs, pg, &remote_id) < 0 )
-					{
-						if(can_show(ktb_remotify_puts))
-							pr_info(" *** mtp | page was NOT FOUND at RS:"
-									" %s bflt | ktb_remotify_puts *** \n", 
-									rs->rs_ip); 
-					}
-					else
-					{
-						succ_count++;
-						if(can_show(ktb_remotify_puts))
-							pr_info(" *** mtp | page was FOUND at RS: %s, with"
-									" ID: %llu | ktb_remotify_puts *** \n",
-									rs->rs_ip, remote_id);
+                                /**/
+                                if(tcp_client_snd_page(rs, pg, &remote_id) < 0 )
+                                {
+                                        if(can_show(ktb_remotify_puts))
+                                                pr_info(" *** mtp | page was NOT FOUND at RS:"
+                                                                " %s bflt | ktb_remotify_puts *** \n", 
+                                                                rs->rs_ip); 
+                                }
+                                else
+                                {
+                                        succ_count++;
+                                        if(can_show(ktb_remotify_puts))
+                                                pr_info(" *** mtp | page was FOUND at RS: %s, with"
+                                                                " ID: %llu | ktb_remotify_puts *** \n",
+                                                                rs->rs_ip, remote_id);
 
-						/**/
-						tmem_remotified_pcd_status_update(pcd, firstbyte,\
-								remote_id, rs->rs_ip);
+                                        /**/
+                                        tmem_remotified_pcd_status_update(pcd, firstbyte,\
+                                                        remote_id, rs->rs_ip, &rdedup);
 
-						//rdedup = true;
-						break;
-					}
-				}
-				else
-				{
-					if(can_show(ktb_remotify_puts))
-						pr_info(" *** mtp | the rscl object is NOT PRESENT in"
-								" BFLT of RS: %s | ktb_remotify_puts *** \n",
-								rs->rs_ip);
-				}
-			}
-			up_read(&rs_rwmutex);
-			__free_page(pg);
+                                        //rdedup = true;
+                                        break;
+                                }
+                        }
+                        else
+                        {
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info(" *** mtp | the rscl object is NOT PRESENT in"
+                                                        " BFLT of RS: %s | ktb_remotify_puts *** \n",
+                                                        rs->rs_ip);
+                        }
+                }
+                up_read(&rs_rwmutex);
+                __free_page(pg);
 
-			/*
-			if(rdedup == true)
-				__free_page(pcd->system_page);
-			*/
+                if(rdedup == true)
+                        __free_page(pcd->system_page);
 
-			if(can_show(ktb_remotify_puts))
-			{
-				pr_info(" *** mtp | # remote lookups: %d| ktb_remotify_puts"
-						" *** \n", count);
-				pr_info(" *** mtp | remote lookups succeeded: %d|"
-						" ktb_remotify_puts *** \n", succ_count);
-			}
+                if(can_show(ktb_remotify_puts))
+                {
+                        pr_info(" *** mtp | # remote lookups: %d| ktb_remotify_puts"
+                                        " *** \n", count);
+                        pr_info(" *** mtp | remote lookups succeeded: %d|"
+                                        " ktb_remotify_puts *** \n", succ_count);
+                }
 
-			if(kthread_should_stop())
-				return -1;
+                if(kthread_should_stop())
+                        return -1;
 
-			read_lock(&(tmem_system.system_list_rwlock));
-		}
+                read_lock(&(tmem_system.system_list_rwlock));
+        }
         read_unlock(&(tmem_system.system_list_rwlock));
 
         return 0;
@@ -2100,12 +2098,12 @@ static int __init ktb_main_init(void)
         //----------------------------
         debug(ktb_new_pool);
         /*
-        debug(ktb_put_page);
-        debug(ktb_dup_put_page);
-        debug(ktb_get_page);
-        debug(ktb_flush_page);
-        debug(ktb_flush_object);
-        */
+           debug(ktb_put_page);
+           debug(ktb_dup_put_page);
+           debug(ktb_get_page);
+           debug(ktb_flush_page);
+           debug(ktb_flush_object);
+           */
         debug(ktb_destroy_pool);
         debug(ktb_destroy_client);
         debug(ktb_remotified_get_page);
@@ -2116,15 +2114,15 @@ static int __init ktb_main_init(void)
         // en/dis-able tmem.c debug
         //-------------------------
         /*
-        debug(pcd_associate);
-        debug(pcd_disassociate);
-        debug(tmem_pgp_free);
-        debug(tmem_pgp_free_data);
-        debug(tmem_pgp_destroy);
-        debug(tmem_pool_destroy_objs);
-        debug(custom_radix_tree_destroy);
-        debug(custom_radix_tree_node_destroy);
-        */
+           debug(pcd_associate);
+           debug(pcd_disassociate);
+           debug(tmem_pgp_free);
+           debug(tmem_pgp_free_data);
+           debug(tmem_pgp_destroy);
+           debug(tmem_pool_destroy_objs);
+           debug(custom_radix_tree_destroy);
+           debug(custom_radix_tree_node_destroy);
+           */
         debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
@@ -2150,12 +2148,12 @@ static int __init ktb_main_init(void)
         //------------------------------
         show_msg(ktb_new_pool);
         /*
-        show_msg(ktb_put_page);
-        show_msg(ktb_dup_put_page);
-        show_msg(ktb_get_page);
-        show_msg(ktb_flush_page);
-        show_msg(ktb_flush_object);
-        */
+           show_msg(ktb_put_page);
+           show_msg(ktb_dup_put_page);
+           show_msg(ktb_get_page);
+           show_msg(ktb_flush_page);
+           show_msg(ktb_flush_object);
+           */
         show_msg(ktb_remotified_get_page);
         show_msg(ktb_destroy_pool);
         show_msg(ktb_destroy_client);
@@ -2168,14 +2166,14 @@ static int __init ktb_main_init(void)
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
         /*
-        show_msg(pcd_disassociate);
-        show_msg(tmem_pgp_free);
-        show_msg(tmem_pgp_free_data);
-        show_msg(tmem_pgp_destroy);
-        show_msg(tmem_pool_destroy_objs);
-        show_msg(custom_radix_tree_destroy);
-        show_msg(custom_radix_tree_node_destroy);
-        */
+           show_msg(pcd_disassociate);
+           show_msg(tmem_pgp_free);
+           show_msg(tmem_pgp_free_data);
+           show_msg(tmem_pgp_destroy);
+           show_msg(tmem_pool_destroy_objs);
+           show_msg(custom_radix_tree_destroy);
+           show_msg(custom_radix_tree_node_destroy);
+           */
         // end en/dis-able tmem.c output
 
         //---------------------------
@@ -2241,8 +2239,8 @@ static void __exit ktb_main_exit(void)
                                 &(tmem_system.remote_shared_list))
                 {
                         pcd = 
-                        list_entry(pos, struct tmem_page_content_descriptor,
-                                   system_rs_pcds);
+                                list_entry(pos, struct tmem_page_content_descriptor,
+                                                system_rs_pcds);
                         list_del_init(&(pcd->system_rs_pcds));
                         kfree(pcd->remote_ip);
                         kmem_cache_free(tmem_page_content_desc_cachep, pcd);
@@ -2260,8 +2258,8 @@ static void __exit ktb_main_exit(void)
 
                         if(!ret)
                                 pr_info(" *** mtp | timed forward filter thread"
-                                        " stopped: %d | ktb_main_exit *** \n",
-                                        ret);
+                                                " stopped: %d | ktb_main_exit *** \n",
+                                                ret);
 
                         if(fwd_bflt_thread != NULL)
                                 put_task_struct(fwd_bflt_thread);
@@ -2275,11 +2273,11 @@ static void __exit ktb_main_exit(void)
 
                 if(bloom_filter_unref(tmem_system_bloom_filter))
                         pr_info(" *** mtp | tmem_system_bloom_filter removed"
-                                " successfully | ktb_main_exit \n");
+                                        " successfully | ktb_main_exit \n");
                 else
                         pr_info(" *** mtp | failed to remove"
-                                " tmem_system_bloom_filter"
-                                " | ktb_main_exit \n");
+                                        " tmem_system_bloom_filter"
+                                        " | ktb_main_exit \n");
         }
 
         network_server_exit();
@@ -2295,7 +2293,7 @@ static void __exit ktb_main_exit(void)
         kmem_cache_destroy(tmem_page_descriptors_cachep);
 
         pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED |"
-                " ktb_main_exit *** \n");
+                        " ktb_main_exit *** \n");
 }
 /******************************************************************************/
 /*							   END KTB MODULE EXIT*/
