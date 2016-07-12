@@ -394,9 +394,24 @@ int pcd_add_to_remote_tree(int8_t firstbyte, uint64_t id,\
 	struct radix_tree_root *tree_root;
 
 	write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+
+        pr_info("after write_lock firstbyte: %u, lock: %d, add: %llx  \n", firstbyte,
+                (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
+                &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+
 	tree_root = &(tmem_system.pcd_remote_tree_roots[firstbyte]);
+
+        pr_info("after getting tree root: %llx \n", tree_root);
+
 	ret = radix_tree_insert(tree_root, id, pcd);
+
+        pr_info("after inserting into radix_tree: %d \n", ret);
+
 	write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+
+        pr_info("after write_unlock firstbyte: %u, lock: %d, add: %llx  \n", firstbyte,
+                (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
+                &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 
 	return ret;
 }
