@@ -2124,9 +2124,9 @@ static int __init ktb_main_init(void)
            debug(tmem_pool_destroy_objs);
            debug(custom_radix_tree_destroy);
            debug(custom_radix_tree_node_destroy);
-           */
+           debug(pcd_add_to_remote_tree);
+        */
         debug(pcd_remote_associate);
-        debug(pcd_add_to_remote_tree);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
         // end en/dis-able tmem.c debug
@@ -2168,8 +2168,8 @@ static int __init ktb_main_init(void)
         //-------------------------
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
-        show_msg(pcd_add_to_remote_tree);
         /*
+           show_msg(pcd_add_to_remote_tree);
            show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free);
            show_msg(tmem_pgp_free_data);
