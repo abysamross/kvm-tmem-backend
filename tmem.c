@@ -21,6 +21,7 @@ extern int debug_tmem_pgp_free;
 extern int debug_tmem_pgp_free_data;
 extern int debug_custom_radix_tree_destroy;
 extern int debug_custom_radix_tree_node_destroy;
+extern int debug_pcd_add_to_remote_tree;
 
 extern int show_msg_pcd_associate;
 extern int show_msg_pcd_disassociate;
@@ -31,6 +32,7 @@ extern int show_msg_tmem_pgp_free_data;
 extern int show_msg_custom_radix_tree_destroy;
 extern int show_msg_custom_radix_tree_node_destroy;
 extern int show_msg_pcd_remote_associate;
+extern int show_msg_pcd_add_to_remote_tree;
 
 extern u64 tmem_dedups;
 extern u64 succ_tmem_dedups;
@@ -386,38 +388,49 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
 	return ret;
 }
 
-int pcd_add_to_remote_tree(int8_t firstbyte, uint64_t id,\
+int pcd_add_to_remote_tree(uint8_t firstbyte, uint64_t id,\
                            struct tmem_page_content_descriptor *pcd)
 {
 	int ret = -1;
 	//unsigned long index = (unsigned long)id;
 	struct radix_tree_root *tree_root;
 
-        pr_info("firstbyte: %u, lock: %d, add: %llx  \n", firstbyte,
+        if(can_debug(pcd_add_to_remote_tree))
+        {
+                pr_info("firstbyte: %u, lock: %d, add: %llx \n", firstbyte,
                 (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
-                &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-        pr_info("tree root: %llx \n", &(tmem_system.pcd_remote_tree_roots[firstbyte]));
-        pr_info("ret: %d \n", ret);
+                (unsigned long long)(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte])));
+                pr_info("tree root: %llx \n", 
+                 (unsigned long long)(&(tmem_system.pcd_remote_tree_roots[firstbyte])));
+                pr_info("ret: %d \n", ret);
+        }
 
 	write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 
-        pr_info("after write_lock firstbyte: %u, lock: %d, add: %llx  \n", firstbyte,
+        if(can_debug(pcd_add_to_remote_tree))
+                pr_info("after write_lock firstbyte: %u, lock: %d, add: %llx \n",
+                        firstbyte,
                 (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
-                &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+                (unsigned long long)(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte])));
 
 	tree_root = &(tmem_system.pcd_remote_tree_roots[firstbyte]);
 
-        pr_info("after getting tree root: %llx \n", tree_root);
+        if(can_debug(pcd_add_to_remote_tree))
+                pr_info("after getting tree root: %llx \n", 
+                        (unsigned long long)tree_root);
 
 	ret = radix_tree_insert(tree_root, id, pcd);
 
-        pr_info("after inserting into radix_tree: %d \n", ret);
+        if(can_debug(pcd_add_to_remote_tree))
+                pr_info("after inserting into radix_tree: %d \n", ret);
 
 	write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 
-        pr_info("after write_unlock firstbyte: %u, lock: %d, add: %llx  \n", firstbyte,
-                (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
-                &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+        if(can_debug(pcd_add_to_remote_tree))
+                pr_info("after write_unlock firstbyte: %u, lock: %d, add: %llx \n", 
+                        firstbyte,
+                        (tmem_system.pcd_remote_tree_rwlocks[firstbyte]).raw_lock.cnts.counter,
+                        (unsigned long long)(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte])));
 
 	return ret;
 }

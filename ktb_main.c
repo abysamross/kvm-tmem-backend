@@ -77,6 +77,7 @@ int debug_bloom_filter_add = 0;
 int debug_bloom_filter_check = 0;
 int debug_timed_fwd_filter = 0;
 int debug_ktb_remotify_puts = 0;
+int debug_pcd_add_to_remote_tree = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -101,6 +102,7 @@ int show_msg_bloom_filter_add = 0;
 int show_msg_bloom_filter_check = 0;
 int show_msg_timed_fwd_filter = 0;
 int show_msg_ktb_remotify_puts = 0;
+int show_msg_pcd_add_to_remote_tree = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
 /******************************************************************************/ 
@@ -2124,6 +2126,7 @@ static int __init ktb_main_init(void)
            debug(custom_radix_tree_node_destroy);
            */
         debug(pcd_remote_associate);
+        debug(pcd_add_to_remote_tree);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
         // end en/dis-able tmem.c debug
@@ -2165,6 +2168,7 @@ static int __init ktb_main_init(void)
         //-------------------------
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
+        show_msg(pcd_add_to_remote_tree);
         /*
            show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free);
