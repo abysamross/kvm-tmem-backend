@@ -523,7 +523,8 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 					" remote page. Local page index: %u"
 					" of object: %llu %llu %llu rooted at"
 					" rb_tree slot: %u of pool: %u of"
-					" client: %u, having firstbyte: %u |"
+					" client: %u, having firstbyte: %u, "
+                                        " pgp_firstbyte: %u, pcd_firstbyte: %u |"
 					" pcd_remote_associate *** \n",
 					pcd->pgp->index,
 					pcd->pgp->obj->oid.oid[2],
@@ -532,7 +533,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 					tmem_oid_hash(&(pcd->pgp->obj->oid)),
 					pcd->pgp->obj->pool->pool_id,
 					pcd->pgp->obj->pool->associated_client->client_id,
-					firstbyte);
+					firstbyte, pcd->pgp->firstbyte, pcd->firstbyte);
 			/* 
 			 * this pcd is alreay associated to a remote page.
 			 */

@@ -266,7 +266,7 @@ struct tmem_page_content_descriptor {
 	 * hence it will never be both.
 	 */
         uint64_t remote_id;
-        uint8_t firstbyte;
+        uint16_t firstbyte;
         //uint64_t pagehash;
 	//struct list_head pgp_list;
     	//bool eviction_attempted;  // CHANGE TO lifetimes? (settable)
