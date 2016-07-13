@@ -2215,7 +2215,7 @@ static void __exit ktb_main_exit(void)
         int ret;
         int cli_id;
 		int count = 0;
-        struct tmem_page_content_descriptor *pcd = NULL;
+        //struct tmem_page_content_descriptor *pcd = NULL;
         struct list_head *pos = NULL;
         //struct list_head *pos_next = NULL;
 
@@ -2293,29 +2293,34 @@ static void __exit ktb_main_exit(void)
 
 
 		/* checking if all pcds are indeed deleted by a ktb_destroy_client call */
-        write_lock(&(tmem_system.system_list_rwlock));
+        //write_lock(&(tmem_system.system_list_rwlock));
+        read_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
         if(!list_empty(&(tmem_system.remote_shared_list)))
         {
                 list_for_each(pos, &(tmem_system.remote_shared_list))
                 {
-						count++;
+			count++;
+                        /*
                         pcd = 
                         list_entry(pos, struct tmem_page_content_descriptor,
                                    system_rs_pcds);
-						if(pcd == NULL)
-							continue;
+                        if(pcd == NULL)
+                                continue;
                         list_del_init(&(pcd->system_rs_pcds));
                         kfree(pcd->remote_ip);
                         kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                        */
                 }
         }
-        write_unlock(&(tmem_system.system_list_rwlock));
+        read_unlock(&(tmem_system.system_list_rwlock));
+        //write_unlock(&(tmem_system.system_list_rwlock));
 
-		pr_info(" *** mtp | RS pcds that still remained: %d | ktb_main_exit *** \n",
-				count);
+        pr_info(" *** mtp | RS pcds that still remained: %d | ktb_main_exit *** \n",
+                        count);
 
-		count = 0;
+        count = 0;
+        pos = NULL;
 
         read_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
@@ -2323,7 +2328,7 @@ static void __exit ktb_main_exit(void)
         {
                 list_for_each(pos, &(tmem_system.local_only_list))
                 {
-						count++;
+			count++;
 						/*
                         pcd = 
                         list_entry(pos, struct tmem_page_content_descriptor,
@@ -2338,10 +2343,12 @@ static void __exit ktb_main_exit(void)
         }
         read_unlock(&(tmem_system.system_list_rwlock));
 
-		pr_info(" *** mtp | LOL pcds that still remained: %d | ktb_main_exit *** \n",
-				count);
+        pr_info(" *** mtp | LOL pcds that still remained: %d | ktb_main_exit *** \n",
+                        count);
 
-		count = 0;
+	count = 0;
+        pos = NULL;
+
 
         read_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
