@@ -902,11 +902,11 @@ int ktb_remotify_puts(void)
 
                 if(can_debug(ktb_remotify_puts))
                         pr_info(" *** mtp | details of pcd to be remotified."
-                                " firstbyte: %u, status: %d, remote_ip: %s,"
-                                " remote_id: %llu, sys_page: %s |"
-                                " ktb_remotify_puts ***\n", pcd->firstbyte,
-                                pcd->status, pcd->remote_ip, pcd->remote_id,
-                                (pcd->system_page == NULL)?"NULL":"NOT NULL");
+                                        " firstbyte: %u, status: %d, remote_ip: %s,"
+                                        " remote_id: %llu, sys_page: %s |"
+                                        " ktb_remotify_puts ***\n", pcd->firstbyte,
+                                        pcd->status, pcd->remote_ip, pcd->remote_id,
+                                        (pcd->system_page == NULL)?"NULL":"NOT NULL");
 
                 read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                 read_unlock(&(tmem_system.system_list_rwlock));
@@ -2124,7 +2124,7 @@ static int __init ktb_main_init(void)
            debug(custom_radix_tree_node_destroy);
            debug(pcd_add_to_remote_tree);
            debug(tmem_pgp_free_data);
-        */
+           */
         debug(pcd_disassociate);
         debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
@@ -2214,11 +2214,15 @@ static void __exit ktb_main_exit(void)
 {
         int ret;
         int cli_id;
-		int count = 0;
+        int count = 0;
         //struct tmem_page_content_descriptor *pcd = NULL;
         struct list_head *pos = NULL;
         //struct list_head *pos_next = NULL;
 
+        /* first set all the kvm_host_tmem_ops to NULL */
+        kvm_host_tmem_deregister_ops();
+
+        /* now you can reset pointers to actual functions here */ 
         ktb_ops.kvm_host_new_pool = NULL;
         ktb_ops.kvm_host_put_page = NULL;
         ktb_ops.kvm_host_get_page = NULL;
@@ -2228,28 +2232,27 @@ static void __exit ktb_main_exit(void)
         ktb_ops.kvm_host_create_client = NULL;
         ktb_ops.kvm_host_destroy_client = NULL;
 
-        kvm_host_tmem_deregister_ops();
 
         /* 
          * remove the remaining pcds from the system_rs_pcds list and 
          * destroy the pcds. The pcds from the system_lol_pcds and system_rscl_pcds
          * list will be removed as a part of pcd_disassociate which will be called
          * eventually as a result of ktb_destroy_client().
-		 * For pcds in system_rs_pcds also the same happens?? Isn't it?
-        write_lock(&(tmem_system.system_list_rwlock));
+         * For pcds in system_rs_pcds also the same happens?? Isn't it?
+         write_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
         if(!list_empty(&(tmem_system.remote_shared_list)))
         {
-                list_for_each_safe(pos, pos_next,
-                                &(tmem_system.remote_shared_list))
-                {
-                        pcd = 
-                        list_entry(pos, struct tmem_page_content_descriptor,
-                                                system_rs_pcds);
-                        list_del_init(&(pcd->system_rs_pcds));
-                        kfree(pcd->remote_ip);
-                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
-                }
+        list_for_each_safe(pos, pos_next,
+        &(tmem_system.remote_shared_list))
+        {
+        pcd = 
+        list_entry(pos, struct tmem_page_content_descriptor,
+        system_rs_pcds);
+        list_del_init(&(pcd->system_rs_pcds));
+        kfree(pcd->remote_ip);
+        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+        }
         }
         write_unlock(&(tmem_system.system_list_rwlock));
         */
@@ -2292,7 +2295,7 @@ static void __exit ktb_main_exit(void)
                 ktb_destroy_client(cli_id);
 
 
-		/* checking if all pcds are indeed deleted by a ktb_destroy_client call */
+        /* checking if all pcds are indeed deleted by a ktb_destroy_client call */
         //write_lock(&(tmem_system.system_list_rwlock));
         read_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
@@ -2300,17 +2303,17 @@ static void __exit ktb_main_exit(void)
         {
                 list_for_each(pos, &(tmem_system.remote_shared_list))
                 {
-			count++;
+                        count++;
                         /*
-                        pcd = 
-                        list_entry(pos, struct tmem_page_content_descriptor,
-                                   system_rs_pcds);
-                        if(pcd == NULL)
-                                continue;
-                        list_del_init(&(pcd->system_rs_pcds));
-                        kfree(pcd->remote_ip);
-                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
-                        */
+                           pcd = 
+                           list_entry(pos, struct tmem_page_content_descriptor,
+                           system_rs_pcds);
+                           if(pcd == NULL)
+                           continue;
+                           list_del_init(&(pcd->system_rs_pcds));
+                           kfree(pcd->remote_ip);
+                           kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                           */
                 }
         }
         read_unlock(&(tmem_system.system_list_rwlock));
@@ -2328,17 +2331,17 @@ static void __exit ktb_main_exit(void)
         {
                 list_for_each(pos, &(tmem_system.local_only_list))
                 {
-			count++;
-						/*
-                        pcd = 
-                        list_entry(pos, struct tmem_page_content_descriptor,
-                                   system_lol_pcds);
-						if(pcd == NULL)
-							continue;
-                        list_del_init(&(pcd->system_rs_pcds));
-                        kfree(pcd->remote_ip);
-                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
-						*/
+                        count++;
+                        /*
+                           pcd = 
+                           list_entry(pos, struct tmem_page_content_descriptor,
+                           system_lol_pcds);
+                           if(pcd == NULL)
+                           continue;
+                           list_del_init(&(pcd->system_rs_pcds));
+                           kfree(pcd->remote_ip);
+                           kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                           */
                 }
         }
         read_unlock(&(tmem_system.system_list_rwlock));
@@ -2346,7 +2349,7 @@ static void __exit ktb_main_exit(void)
         pr_info(" *** mtp | LOL pcds that still remained: %d | ktb_main_exit *** \n",
                         count);
 
-	count = 0;
+        count = 0;
         pos = NULL;
 
 
@@ -2356,23 +2359,23 @@ static void __exit ktb_main_exit(void)
         {
                 list_for_each(pos, &(tmem_system.remote_sharing_candidate_list))
                 {
-						count++;
-						/*
-                        pcd = 
-                        list_entry(pos, struct tmem_page_content_descriptor,
-                                   system_lol_pcds);
-						if(pcd == NULL)
-							continue;
-                        list_del_init(&(pcd->system_rs_pcds));
-                        kfree(pcd->remote_ip);
-                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
-						*/
+                        count++;
+                        /*
+                           pcd = 
+                           list_entry(pos, struct tmem_page_content_descriptor,
+                           system_lol_pcds);
+                           if(pcd == NULL)
+                           continue;
+                           list_del_init(&(pcd->system_rs_pcds));
+                           kfree(pcd->remote_ip);
+                           kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                           */
                 }
         }
         read_unlock(&(tmem_system.system_list_rwlock));
 
-		pr_info(" *** mtp | RSCL pcds that still remained: %d | ktb_main_exit *** \n",
-				count);
+        pr_info(" *** mtp | RSCL pcds that still remained: %d | ktb_main_exit *** \n",
+                        count);
 
         debugfs_remove_recursive(root);
 
@@ -2388,7 +2391,7 @@ static void __exit ktb_main_exit(void)
 /*							   END KTB MODULE EXIT*/
 /******************************************************************************/
 
-module_init(ktb_main_init)
+        module_init(ktb_main_init)
 module_exit(ktb_main_exit)
 /******************************************************************************/
 /*								END KTB MODULE*/

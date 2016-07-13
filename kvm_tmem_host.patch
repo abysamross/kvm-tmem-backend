@@ -311,6 +311,8 @@ diff -Nr -U 5 -X /home/aby/diff_ignore kernel_source/linux-4.1.3-vanilla/drivers
 +{
 +        int id;
 +
++       write_lock(&kvm_host_tmem_rwlock);
++
 +	kvm_host_tmem_ops.kvm_host_new_pool = NULL;
 +	kvm_host_tmem_ops.kvm_host_destroy_pool = NULL;
 +	kvm_host_tmem_ops.kvm_host_put_page = NULL;
@@ -320,7 +322,6 @@ diff -Nr -U 5 -X /home/aby/diff_ignore kernel_source/linux-4.1.3-vanilla/drivers
 +	kvm_host_tmem_ops.kvm_host_create_client = NULL;
 +	kvm_host_tmem_ops.kvm_host_destroy_client = NULL;
 +
-+        write_lock(&kvm_host_tmem_rwlock);
 +
 +	for(id=0; id<MAX_VMS; ++id)
 +	{
