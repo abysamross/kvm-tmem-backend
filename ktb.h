@@ -340,7 +340,7 @@ extern int pcd_remote_associate(struct page*, uint64_t*);
 
 /*update status of remotified page*/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor*,\
-				       uint8_t, uint64_t, char*, bool*);
+				       uint8_t, uint64_t, char*);//bool*);
 
 /*custom radix_tree_destroy function*/
 //bool  __radix_tree_delete_node(struct radix_tree_root*,struct radix_tree_node*);

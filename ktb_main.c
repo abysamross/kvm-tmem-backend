@@ -882,7 +882,7 @@ int ktb_remotify_puts(void)
                         system_rscl_pcds)
         {
                 bool bloom_res;
-                bool rdedup = false;
+                //bool rdedup = false;
                 uint8_t firstbyte;
                 struct remote_server *rs;
                 struct page *pg = alloc_page(GFP_ATOMIC);
@@ -953,10 +953,12 @@ int ktb_remotify_puts(void)
                                                                 " ID: %llu | ktb_remotify_puts *** \n",
                                                                 rs->rs_ip, remote_id);
 
-                                        /**/
+                                        /*
                                         tmem_remotified_pcd_status_update(pcd, firstbyte,\
                                                         remote_id, rs->rs_ip, &rdedup);
-
+                                        */
+                                        tmem_remotified_pcd_status_update(pcd, firstbyte,\
+                                                        remote_id, rs->rs_ip);
                                         //rdedup = true;
                                         break;
                                 }
@@ -972,8 +974,10 @@ int ktb_remotify_puts(void)
                 up_read(&rs_rwmutex);
                 __free_page(pg);
 
+                /*
                 if(rdedup == true)
                         __free_page(pcd->system_page);
+                */
 
                 if(can_show(ktb_remotify_puts))
                 {
