@@ -920,12 +920,13 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		pr_info(" *** mtp | Diassociating page with index: %u of object:"
 			" %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
 			" of client: %u, having firstbyte: %u from it's page"
-			" content descriptor (NO MORE REF TO THIS PAGE) |"
-			" pcd_disassociate *** \n",
+			" content descriptor (NO MORE REF TO THIS PAGE), pcd->status: "
+			" %d |  pcd_disassociate *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 			pgp->obj->pool->pool_id,
-			pgp->obj->pool->associated_client->client_id, firstbyte);
+			pgp->obj->pool->associated_client->client_id, firstbyte,
+			pcd->status);
 	/*
 	 * no more references to this pcd, recycle it and the physical page.
 	 * also this pcd can be either in remote_sharing_candidate_list or
@@ -953,6 +954,10 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	}
 
 	pcd->pgp = NULL;
+
+	if(pcd->status == 2)
+		goto skiprbfree;
+
 	pcd->system_page = NULL;
 	//remove pcd from rbtree
 	rb_erase(&pcd->pcd_rb_tree_node,\
@@ -960,6 +965,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	//reinit the struct for safety for now
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
 	//now free up the pcd memory
+skiprbfree:
 	kmem_cache_free(tmem_page_content_desc_cachep, pcd);
 	//free up the system page that pcd held
 	if(system_page != NULL)

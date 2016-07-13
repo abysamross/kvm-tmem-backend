@@ -2169,9 +2169,9 @@ static int __init ktb_main_init(void)
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
         show_msg(tmem_pgp_free_data);
+        show_msg(pcd_disassociate);
         /*
            show_msg(pcd_add_to_remote_tree);
-           show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free);
            show_msg(tmem_pgp_destroy);
            show_msg(tmem_pool_destroy_objs);
@@ -2214,9 +2214,10 @@ static void __exit ktb_main_exit(void)
 {
         int ret;
         int cli_id;
+		int count = 0;
         struct tmem_page_content_descriptor *pcd = NULL;
         struct list_head *pos = NULL;
-        struct list_head *pos_next = NULL;
+        //struct list_head *pos_next = NULL;
 
         ktb_ops.kvm_host_new_pool = NULL;
         ktb_ops.kvm_host_put_page = NULL;
@@ -2234,7 +2235,7 @@ static void __exit ktb_main_exit(void)
          * destroy the pcds. The pcds from the system_lol_pcds and system_rscl_pcds
          * list will be removed as a part of pcd_disassociate which will be called
          * eventually as a result of ktb_destroy_client().
-         */
+		 * For pcds in system_rs_pcds also the same happens?? Isn't it?
         write_lock(&(tmem_system.system_list_rwlock));
         //if(!list_empty(&pcd->system_rscl_pcds))
         if(!list_empty(&(tmem_system.remote_shared_list)))
@@ -2243,7 +2244,7 @@ static void __exit ktb_main_exit(void)
                                 &(tmem_system.remote_shared_list))
                 {
                         pcd = 
-                                list_entry(pos, struct tmem_page_content_descriptor,
+                        list_entry(pos, struct tmem_page_content_descriptor,
                                                 system_rs_pcds);
                         list_del_init(&(pcd->system_rs_pcds));
                         kfree(pcd->remote_ip);
@@ -2251,6 +2252,7 @@ static void __exit ktb_main_exit(void)
                 }
         }
         write_unlock(&(tmem_system.system_list_rwlock));
+        */
 
         mutex_lock(&timed_ff_mutex);
         if(fwd_bflt_thread != NULL)
@@ -2288,6 +2290,82 @@ static void __exit ktb_main_exit(void)
 
         for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
                 ktb_destroy_client(cli_id);
+
+
+		/* checking if all pcds are indeed deleted by a ktb_destroy_client call */
+        write_lock(&(tmem_system.system_list_rwlock));
+        //if(!list_empty(&pcd->system_rscl_pcds))
+        if(!list_empty(&(tmem_system.remote_shared_list)))
+        {
+                list_for_each(pos, &(tmem_system.remote_shared_list))
+                {
+						count++;
+                        pcd = 
+                        list_entry(pos, struct tmem_page_content_descriptor,
+                                   system_rs_pcds);
+						if(pcd == NULL)
+							continue;
+                        list_del_init(&(pcd->system_rs_pcds));
+                        kfree(pcd->remote_ip);
+                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                }
+        }
+        write_unlock(&(tmem_system.system_list_rwlock));
+
+		pr_info(" *** mtp | RS pcds that still remained: %d | ktb_main_exit *** \n",
+				count);
+
+		count = 0;
+
+        read_lock(&(tmem_system.system_list_rwlock));
+        //if(!list_empty(&pcd->system_rscl_pcds))
+        if(!list_empty(&(tmem_system.local_only_list)))
+        {
+                list_for_each(pos, &(tmem_system.local_only_list))
+                {
+						count++;
+						/*
+                        pcd = 
+                        list_entry(pos, struct tmem_page_content_descriptor,
+                                   system_lol_pcds);
+						if(pcd == NULL)
+							continue;
+                        list_del_init(&(pcd->system_rs_pcds));
+                        kfree(pcd->remote_ip);
+                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+						*/
+                }
+        }
+        read_unlock(&(tmem_system.system_list_rwlock));
+
+		pr_info(" *** mtp | LOL pcds that still remained: %d | ktb_main_exit *** \n",
+				count);
+
+		count = 0;
+
+        read_lock(&(tmem_system.system_list_rwlock));
+        //if(!list_empty(&pcd->system_rscl_pcds))
+        if(!list_empty(&(tmem_system.remote_sharing_candidate_list)))
+        {
+                list_for_each(pos, &(tmem_system.remote_sharing_candidate_list))
+                {
+						count++;
+						/*
+                        pcd = 
+                        list_entry(pos, struct tmem_page_content_descriptor,
+                                   system_lol_pcds);
+						if(pcd == NULL)
+							continue;
+                        list_del_init(&(pcd->system_rs_pcds));
+                        kfree(pcd->remote_ip);
+                        kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+						*/
+                }
+        }
+        read_unlock(&(tmem_system.system_list_rwlock));
+
+		pr_info(" *** mtp | RSCL pcds that still remained: %d | ktb_main_exit *** \n",
+				count);
 
         debugfs_remove_recursive(root);
 
