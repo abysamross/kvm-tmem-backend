@@ -885,13 +885,13 @@ int ktb_remotify_puts(void)
                 //bool rdedup = false;
                 uint8_t firstbyte;
                 struct remote_server *rs;
-                struct page *pg = alloc_page(GFP_ATOMIC);
+                struct page *page = alloc_page(GFP_ATOMIC);
                 void *vaddr1, *vaddr2;
                 uint64_t remote_id;
 
                 count++;
 
-                vaddr1 = page_address(pg);
+                vaddr1 = page_address(page);
                 memset(vaddr1, 0, PAGE_SIZE);
                 firstbyte = tmem_get_first_byte(pcd->system_page);
 
@@ -938,7 +938,7 @@ int ktb_remotify_puts(void)
                                                         rs->rs_ip);
 
                                 /**/
-                                if(tcp_client_snd_page(rs, pg, &remote_id) < 0 )
+                                if(tcp_client_snd_page(rs, page, &remote_id) < 0 )
                                 {
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | page was NOT FOUND at RS:"
@@ -972,7 +972,7 @@ int ktb_remotify_puts(void)
                         }
                 }
                 up_read(&rs_rwmutex);
-                __free_page(pg);
+                __free_page(page);
 
                 /*
                 if(rdedup == true)

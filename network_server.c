@@ -443,7 +443,7 @@ int compare_page(struct page *new_page, uint64_t *id)
 
 int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, uint64_t *id)
 {
-	int ret, len = 49;
+	int ret = 0, len = 49;
 	//int i;
 	char out_buf[len+1];
 	//char *ip, *tmp;
@@ -453,7 +453,10 @@ int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, uint64_t *id)
 	new_page = alloc_page(GFP_ATOMIC);
 
 	if(new_page == NULL)
+        {
+                ret = -1;
 		goto recv_page_fail;
+        }
 
 	new_page_vaddr = page_address(new_page);
 	memset(new_page_vaddr, 0, PAGE_SIZE);
@@ -509,17 +512,19 @@ int rcv_and_cmp_page(struct tcp_conn_handler_data *conn, uint64_t *id)
 			conn->thread_id, ret, conn->ip);
 
 	if(ret != PAGE_SIZE)
-		goto recv_page_fail;
+        {
+                ret = -1;
+		goto recv_page_out;
+        }
 
 	//if(compare_page(new_page, new_page_vaddr) < 0)
-	if(compare_page(new_page, id) < 0)
-		goto recv_page_fail;
+        ret = compare_page(new_page, id);
 
-	return 0;
+recv_page_out:
+        __free_page(new_page);
 
 recv_page_fail:
-
-	return -1;
+	return ret;
 }
 //struct remote_server *register_rs(struct socket *socket, char* pkt,
 //                int id, struct sockaddr_in *address)

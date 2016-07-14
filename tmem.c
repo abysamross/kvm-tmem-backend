@@ -639,7 +639,7 @@ match:
 	succ_tmem_remote_dedups++;
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-	__free_page(remote_page);
+	//__free_page(remote_page);
 	return ret;
 }
 
