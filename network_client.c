@@ -296,6 +296,7 @@ int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
 	char out_msg[len+1];
 	void *vaddr;
 	struct socket *conn_socket; 
+        unsigned long jleft = 0;
 
 	DECLARE_WAIT_QUEUE_HEAD(page_wait);                               
 
@@ -311,15 +312,16 @@ int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
 
 snd_page_wait:
 
-	wait_event_timeout(page_wait,\
+        jleft =
+        wait_event_timeout(page_wait,\
 			   !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
 			   10*HZ);   
 
 	if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
 	{
 		if(can_show(tcp_client_snd_page))
-			pr_info(" *** mtp | client receiving message | "
-				"tcp_client_snd_page ***\n");                           
+			pr_info(" *** mtp | client receiving message, jleft:"
+                                " %lu | tcp_client_snd_page ***\n", jleft);                           
 
 		memset(in_msg, 0, len+1);                                 
 

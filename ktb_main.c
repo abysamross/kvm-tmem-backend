@@ -2173,6 +2173,7 @@ static int __init ktb_main_init(void)
         debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
+        debug(timed_fwd_filter);
         // end en/dis-able tmem.c debug
 
         //---------------------------
@@ -2213,6 +2214,7 @@ static int __init ktb_main_init(void)
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
         show_msg(pcd_disassociate);
+        show_msg(timed_fwd_filter)
         /*
            show_msg(tmem_pgp_free_data);
            show_msg(pcd_add_to_remote_tree);
