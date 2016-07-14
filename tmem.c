@@ -309,6 +309,12 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         //*rdedup = true;
         __free_page(pcd->system_page);
 
+        if(pcd->system_page != NULL)
+                pr_info(" OMG: pcd->system_page != NULL even after"
+                        "__free_page \n");
+
+        pcd->system_page = NULL;
+
 	write_unlock(&(tmem_system.system_list_rwlock));
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
@@ -603,6 +609,8 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 		pr_info(" *** mtp | Found no match to de-duplicate remote "
 			"page having firstbyte: %u | pcd_remote_associate "
 			"*** \n", firstbyte);
+
+        goto getout;
 	/*
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);
@@ -626,6 +634,7 @@ match:
 			      &(tmem_system.local_only_list));
 	}
 	write_unlock(&(tmem_system.system_list_rwlock));
+
 	succ_tmem_dedups++;
 	succ_tmem_remote_dedups++;
 getout:
@@ -828,6 +837,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	pcd->firstbyte = firstbyte;
 	//pcd->pagehash = pghash;
 
+	rb_link_node(&pcd->pcd_rb_tree_node, parent, new);
+	rb_insert_color(&pcd->pcd_rb_tree_node, root);
 	/*
 	 * insert this newly created pcd into list of unique pcds, ones that are
 	 * potential candidates for remote sharing.
@@ -841,8 +852,6 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 
 	update_bflt(pcd);
 
-	rb_link_node(&pcd->pcd_rb_tree_node, parent, new);
-	rb_insert_color(&pcd->pcd_rb_tree_node, root);
 
 match:
 	pcd->pgp_ref_count++;
