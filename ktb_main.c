@@ -78,6 +78,7 @@ int debug_bloom_filter_check = 0;
 int debug_timed_fwd_filter = 0;
 int debug_ktb_remotify_puts = 0;
 int debug_pcd_add_to_remote_tree = 0;
+int debug_tmem_remotified_pcd_status_update = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -103,6 +104,7 @@ int show_msg_bloom_filter_check = 0;
 int show_msg_timed_fwd_filter = 0;
 int show_msg_ktb_remotify_puts = 0;
 int show_msg_pcd_add_to_remote_tree = 0;
+int show_msg_tmem_remotified_pcd_status_update = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
 /******************************************************************************/ 
@@ -116,10 +118,22 @@ u64 tmem_puts;
 u64 succ_tmem_puts;
 u64 failed_tmem_puts;
 
+u64 tmem_remotify_puts;
+u64 succ_tmem_remotify_puts;
+u64 failed_tmem_remotify_puts;
+/***************************/
 u64 tmem_gets;
 u64 succ_tmem_gets;
 u64 failed_tmem_gets;
 
+u64 tmem_remotified_gets;
+u64 succ_tmem_remotified_gets;
+u64 failed_tmem_remotified_gets;
+
+u64 gets_from_remote;
+u64 succ_gets_from_remote;
+u64 failed_gets_from_remote;
+/***************************/
 u64 tmem_dedups;
 u64 succ_tmem_dedups;
 u64 failed_tmem_dedups;
@@ -127,7 +141,7 @@ u64 failed_tmem_dedups;
 u64 tmem_remote_dedups;
 u64 succ_tmem_remote_dedups;
 u64 failed_tmem_remote_dedups;
-
+/***************************/
 u64 tmem_invalidates;
 u64 succ_tmem_invalidates;
 u64 failed_tmem_invalidates;
@@ -582,6 +596,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
 
         read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
         read_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+        gets_from_remote++;
         /*
          * you may or may not delete this page from the pcd_remote_tree_roots radix
          * tree. Better let it remain there itself. It's of no consequence and most
@@ -594,6 +609,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         if(pcd == NULL)
         {
                 ret = -1;
+                failed_gets_from_remote++;
                 goto rget_unlock;
         }
         /*
@@ -602,6 +618,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         BUG_ON(pcd->status == 2);
         vaddr2 = page_address(pcd->system_page);
         memcpy(vaddr1, vaddr2, PAGE_SIZE);
+        succ_gets_from_remote++;
 
 rget_unlock:
 
@@ -890,6 +907,7 @@ int ktb_remotify_puts(void)
                 uint64_t remote_id;
 
                 count++;
+                tmem_remotify_puts++;
 
                 vaddr1 = page_address(page);
                 memset(vaddr1, 0, PAGE_SIZE);
@@ -940,6 +958,7 @@ int ktb_remotify_puts(void)
                                 /**/
                                 if(tcp_client_snd_page(rs, page, &remote_id) < 0 )
                                 {
+                                        failed_tmem_remotify_puts++;
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | page was NOT FOUND at RS:"
                                                                 " %s bflt | ktb_remotify_puts *** \n", 
@@ -947,7 +966,7 @@ int ktb_remotify_puts(void)
                                 }
                                 else
                                 {
-                                        succ_count++;
+                                        succ_tmem_remotify_puts++;
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | page was FOUND at RS: %s, with"
                                                                 " ID: %llu | ktb_remotify_puts *** \n",
@@ -2045,10 +2064,31 @@ static int __init ktb_main_init(void)
                 debugfs_create_u64("puts_failed", S_IRUGO, root,\
                                 &failed_tmem_puts);
 
+                debugfs_create_u64("remotify_puts", S_IRUGO, root,\
+                                &tmem_remotify_puts);
+                debugfs_create_u64("remotify_puts_succ", S_IRUGO, root,\
+                                &succ_tmem_remotify_puts);
+                debugfs_create_u64("remotify_puts_failed", S_IRUGO, root,\
+                                &failed_tmem_remotify_puts);
+
                 debugfs_create_u64("gets", S_IRUGO, root, &tmem_gets);
                 debugfs_create_u64("gets_succ", S_IRUGO, root, &succ_tmem_gets);
                 debugfs_create_u64("gets_failed", S_IRUGO, root,\
                                 &failed_tmem_gets);
+
+                debugfs_create_u64("remotified_gets", S_IRUGO, root,\
+                                &tmem_remotified_gets);
+                debugfs_create_u64("remotified_gets_succ", S_IRUGO, root,\
+                                &succ_tmem_remotified_gets);
+                debugfs_create_u64("remotified_gets_failed", S_IRUGO, root,\
+                                &failed_tmem_remotified_gets);
+
+                debugfs_create_u64("gets_from_remote", S_IRUGO, root,\
+                                &gets_from_remote);
+                debugfs_create_u64("gets_from_remote_succ", S_IRUGO, root,\
+                                &succ_gets_from_remote);
+                debugfs_create_u64("gets_from_remote_failed", S_IRUGO, root,\
+                                &failed_gets_from_remote);
 
                 debugfs_create_u64("dedups", S_IRUGO, root, &tmem_dedups);
                 debugfs_create_u64("dedups_succ", S_IRUGO, root,\
@@ -2395,7 +2435,7 @@ static void __exit ktb_main_exit(void)
 /*							   END KTB MODULE EXIT*/
 /******************************************************************************/
 
-        module_init(ktb_main_init)
+module_init(ktb_main_init)
 module_exit(ktb_main_exit)
 /******************************************************************************/
 /*								END KTB MODULE*/

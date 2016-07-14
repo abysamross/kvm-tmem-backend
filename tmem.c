@@ -22,6 +22,7 @@ extern int debug_tmem_pgp_free_data;
 extern int debug_custom_radix_tree_destroy;
 extern int debug_custom_radix_tree_node_destroy;
 extern int debug_pcd_add_to_remote_tree;
+extern int debug_tmem_remotified_pcd_status_update;
 
 extern int show_msg_pcd_associate;
 extern int show_msg_pcd_disassociate;
@@ -33,10 +34,18 @@ extern int show_msg_custom_radix_tree_destroy;
 extern int show_msg_custom_radix_tree_node_destroy;
 extern int show_msg_pcd_remote_associate;
 extern int show_msg_pcd_add_to_remote_tree;
+extern int debug_tmem_remotified_pcd_status_update;
 
 extern u64 tmem_dedups;
 extern u64 succ_tmem_dedups;
 extern u64 failed_tmem_dedups;
+
+extern u64 succ_tmem_remotify_puts;
+extern u64 failed_tmem_remotify_puts;
+
+extern u64 tmem_remotified_gets;
+extern u64 succ_tmem_remotified_gets;
+extern u64 failed_tmem_remotified_gets;
 
 extern u64 tmem_remote_dedups;
 extern u64 succ_tmem_remote_dedups;
@@ -271,7 +280,10 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
          * pcd_remote_associate
          */
         if(pcd->status == 1)
+        {
+                failed_tmem_remotify_puts++;
                 goto getout;
+        }
 
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
@@ -309,11 +321,14 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         //*rdedup = true;
         __free_page(pcd->system_page);
 
-        if(pcd->system_page != NULL)
-                pr_info(" OMG: pcd->system_page != NULL even after"
-                        "__free_page \n");
-
+        if(can_debug(tmem_remotified_pcd_status_update))
+        {
+                if(pcd->system_page != NULL)
+                        pr_info(" OMG: pcd->system_page != NULL even after"
+                                "__free_page \n");
+        }
         pcd->system_page = NULL;
+        succ_tmem_remotify_puts++;
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 getout:
@@ -358,6 +373,11 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 
 	ret = tmem_copy_to_client(client_page, page);
 
+        if(ret == 0)
+                succ_tmem_remotified_gets++;
+        else
+                failed_tmem_remotified_gets++;
+
         __free_page(page);
 
 exit_remote:
@@ -388,6 +408,7 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
 	//else if(pcd->system_page == NULL && pcd->remote_ip != NULL)
 	else if(pcd->status == 2)
 	{
+                tmem_remotified_gets++;
 		read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 		ret = tmem_remotified_copy_to_client(client_page, pcd);
 	}
@@ -465,7 +486,6 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	root = &(tmem_system.pcd_tree_roots[firstbyte]);
 	new = &(root->rb_node);
 
-	tmem_dedups++;
 	tmem_remote_dedups++;
 	/*
 	   if(can_show(pcd_associate))
@@ -602,7 +622,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	ret = -1;
 	//tmem_free_page();
 	//__free_page(remote_page);
-	failed_tmem_dedups++;
+	//failed_tmem_dedups++;
 	failed_tmem_remote_dedups++;
 
 	if(can_show(pcd_remote_associate))
@@ -635,7 +655,7 @@ match:
 	}
 	write_unlock(&(tmem_system.system_list_rwlock));
 
-	succ_tmem_dedups++;
+	//succ_tmem_dedups++;
 	succ_tmem_remote_dedups++;
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
@@ -1076,6 +1096,7 @@ int tmem_copy_to_client(struct page* client_page, struct page* page)
 
 	if(!memcpy(client_va, tmem_va, PAGE_SIZE))
 		ret = -1;
+
 
 	kunmap_atomic(client_va);
         smp_mb();
