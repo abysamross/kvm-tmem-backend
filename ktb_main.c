@@ -2214,7 +2214,7 @@ static int __init ktb_main_init(void)
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
         show_msg(pcd_disassociate);
-        show_msg(timed_fwd_filter)
+        show_msg(timed_fwd_filter);
         /*
            show_msg(tmem_pgp_free_data);
            show_msg(pcd_add_to_remote_tree);
