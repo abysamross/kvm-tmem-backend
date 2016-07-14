@@ -966,7 +966,7 @@ int ktb_remotify_puts(void)
                                 }
                                 else
                                 {
-                                        succ_tmem_remotify_puts++;
+                                        succ_count++;
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | page was FOUND at RS: %s, with"
                                                                 " ID: %llu | ktb_remotify_puts *** \n",
@@ -2168,8 +2168,8 @@ static int __init ktb_main_init(void)
            debug(custom_radix_tree_node_destroy);
            debug(pcd_add_to_remote_tree);
            debug(tmem_pgp_free_data);
-           */
-        debug(pcd_disassociate);
+           debug(pcd_disassociate);
+        */
         debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
         debug(ktb_remotify_puts);
@@ -2213,9 +2213,9 @@ static int __init ktb_main_init(void)
         //-------------------------
         //show_msg(pcd_associate);
         show_msg(pcd_remote_associate);
-        show_msg(pcd_disassociate);
         show_msg(timed_fwd_filter);
         /*
+           show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free_data);
            show_msg(pcd_add_to_remote_tree);
            show_msg(tmem_pgp_free);
