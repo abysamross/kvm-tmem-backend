@@ -184,11 +184,11 @@ int timed_fwd_filter(void* data)
                                         " TIMER VALUE: %lu secs | timed_fwd_filter"
                                         " *** \n", (jleft/HZ));
 
-                /*for now reset these counters*/
+                /*for now reset these counters
                 tmem_remote_dedups = 0;
                 succ_tmem_remote_dedups = 0;
                 failed_tmem_remote_dedups = 0;
-
+                */
                 __set_current_state(TASK_RUNNING);
 
                 if(signal_pending(current))
