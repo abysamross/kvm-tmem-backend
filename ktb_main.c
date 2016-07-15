@@ -597,7 +597,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         memset(vaddr1, 0, PAGE_SIZE);
 
         if(can_show(ktb_remote_get))
-                pr_info(" *** mtp | Looking for remote page with remote id: %lu"
+                pr_info(" *** mtp | Looking for remote page with remote id: %llu"
                         " in pcd_remote_tree_roots[%u] | ktb_remote_get ***\n",
                         id, firstbyte);
 
@@ -628,7 +628,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         succ_gets_from_remote++;
 
         if(can_show(ktb_remote_get))
-                pr_info(" *** mtp | remote page: %lu was present in"
+                pr_info(" *** mtp | remote page: %llu was present in"
                         " pcd_remote_tree_roots[%u] | ktb_remote_get ***\n", id,
                         firstbyte);
 
