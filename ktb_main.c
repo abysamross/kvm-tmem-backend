@@ -24,12 +24,14 @@ MODULE_AUTHOR("Aby Sam Ross");
 DEFINE_RWLOCK(id_rwlock);
 static int delay = 120;
 int bflt_bit_size = 268435456;
-//unsigned long pcd_remote_ids = 0;
-//unsigned long remote_tree_ids[256];
+int timed_fwd_filter_stopped = 0;
+int ktb_eviction_thread_stopped = 0;
+uint64_t system_unique_pages = 0;
 
 struct tmem_system_view tmem_system;
 //static struct tmem_client ktb_host;
 struct task_struct *fwd_bflt_thread = NULL;
+struct task_struct *ktb_eviction_thread = NULL;
 static struct tmem_client *ktb_all_clients[MAX_CLIENTS];
 struct bloom_filter* tmem_system_bloom_filter;
 struct kmem_cache* tmem_page_descriptors_cachep;
@@ -160,7 +162,7 @@ u64 failed_tmem_page_invalidates;
 /******************************************************************************/ 
 
 /******************************************************************************/
-/*			                          			  bloom filter transfer thread*/
+/*			                          bloom filter transfer thread*/
 /******************************************************************************/
 int timed_fwd_filter(void* data)
 {
@@ -235,11 +237,30 @@ int start_fwd_filter(struct bloom_filter *bflt)
         return 0;
 }
 /******************************************************************************/
-/*			                      			  End bloom filter transfer thread*/
+/*			                      End bloom filter transfer thread*/
 /******************************************************************************/
 
 /******************************************************************************/
-/*							  							  ktb helper functions*/
+/*			                                       eviction thread*/
+/******************************************************************************/
+int ktb_remotify_puts(void);
+int start_eviction_thread(void)
+{
+        ktb_eviction_thread = 
+        kthread_run((void *)ktb_remotify_puts, NULL, "ktb_eviction_thread");
+
+        if(ktb_eviction_thread == NULL)
+                return -1;
+
+        get_task_struct(ktb_eviction_thread);
+
+        return 0;
+}
+/******************************************************************************/
+/*			                                   End eviction thread*/
+/******************************************************************************/
+/******************************************************************************/
+/*							  ktb helper functions*/
 /******************************************************************************/
 
 //Get a client with client ID if one exists
@@ -1012,6 +1033,8 @@ int ktb_remotify_puts(void)
 
                 if(can_show(ktb_remotify_puts))
                 {
+                        pr_info(" *** mtp | # unique system pages: %llu| ktb_remotify_puts"
+                                        " *** \n", system_unique_pages);
                         pr_info(" *** mtp | # remote lookups: %d| ktb_remotify_puts"
                                         " *** \n", count);
                         pr_info(" *** mtp | remote lookups succeeded: %d|"
@@ -1019,7 +1042,10 @@ int ktb_remotify_puts(void)
                 }
 
                 if(kthread_should_stop())
-                        return -1;
+                {
+                        ktb_eviction_thread_stopped = 1;
+                        return 0;
+                }
 
                 read_lock(&(tmem_system.system_list_rwlock));
         }
@@ -2053,12 +2079,25 @@ static int __init ktb_main_init(void)
                                 //vfree(bflt);
                                 //goto netfail;
                         }
-                        else if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                        //else if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                        else
                         {
+                                /*
                                 pr_info(" *** mtp | network server unable to"
                                                 " start timed_fwd_bflt_thread |"
                                                 " ktb_main_init *** \n");
                                 //vfree(tmem_system_bloom_filter);
+                                */
+                                if((start_eviction_thread) < 0)
+                                        pr_info(" *** mtp | network server unable to"
+                                                " start ktb_eviction_thread |"
+                                                " ktb_main_init *** \n");
+
+                                if(start_fwd_filter(tmem_system_bloom_filter) < 0)
+                                        pr_info(" *** mtp | network server unable to"
+                                                " start timed_fwd_bflt_thread |"
+                                                " ktb_main_init *** \n");
+
                         }
                 }
         }
@@ -2181,9 +2220,9 @@ static int __init ktb_main_init(void)
            debug(tmem_pgp_free_data);
            debug(pcd_disassociate);
            debug(pcd_remote_associate);
-           debug(ktb_remotify_puts);
            debug(timed_fwd_filter);
         */
+        debug(ktb_remotify_puts);
         debug(ktb_remotified_get_page);
         debug(ktb_remote_get);
         // end en/dis-able tmem.c debug
@@ -2215,8 +2254,8 @@ static int __init ktb_main_init(void)
            show_msg(ktb_flush_object);
            show_msg(ktb_destroy_pool);
            show_msg(ktb_destroy_client);
-           show_msg(ktb_remotify_puts);
         */
+        show_msg(ktb_remotify_puts);
         show_msg(ktb_remotified_get_page);
         show_msg(ktb_remote_get);
         //end en/dis-able ktb_main.c output
@@ -2334,6 +2373,23 @@ static void __exit ktb_main_exit(void)
                 }
         }
         mutex_unlock(&timed_ff_mutex);
+
+        if(ktb_eviction_thread != NULL)
+        {
+                if(!ktb_eviction_thread_stopped)
+                {
+                        pr_info(" @@@@@@@@@@@@@@@@ \n");
+                        ret = kthread_stop(ktb_eviction_thread);
+
+                        if(!ret)
+                                pr_info(" *** mtp | ktb eviction thread"
+                                        " stopped: %d | ktb_main_exit *** \n",
+                                        ret);
+
+                        if(ktb_eviction_thread != NULL)
+                                put_task_struct(ktb_eviction_thread);
+                }
+        }
 
         if(tmem_system_bloom_filter != NULL)
         {

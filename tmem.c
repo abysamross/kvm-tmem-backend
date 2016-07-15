@@ -329,6 +329,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         }
         pcd->system_page = NULL;
         succ_tmem_remotify_puts++;
+        system_unique_pages--;
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 getout:
@@ -860,9 +861,12 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	rb_link_node(&pcd->pcd_rb_tree_node, parent, new);
 	rb_insert_color(&pcd->pcd_rb_tree_node, root);
 	/*
-	 * insert this newly created pcd into list of unique pcds, ones that are
-	 * potential candidates for remote sharing.
+         * increment unique pages count and insert this newly created pcd"
+         * into list of unique pcds, ones that are potential candidates for"
+         * remote sharing.
 	 */
+        system_unique_pages++;
+
 	write_lock(&(tmem_system.system_list_rwlock));
 
 	list_add_tail(&(pcd->system_rscl_pcds),\
@@ -871,8 +875,6 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	write_unlock(&(tmem_system.system_list_rwlock));
 
 	update_bflt(pcd);
-
-
 match:
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);
@@ -974,7 +976,11 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	/*
 	 * if this pcd is being accessed by some remote machine
 	 */
-	if(pcd->status == 1)
+	pcd->pgp = NULL;
+
+	if(pcd->status == 2)
+		goto skiprbfree;
+        else if(pcd->status == 1)
 	{
 		write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 		pcd = 
@@ -983,19 +989,16 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
 	}
 
-	pcd->pgp = NULL;
-
-	if(pcd->status == 2)
-		goto skiprbfree;
-
 	pcd->system_page = NULL;
 	//remove pcd from rbtree
 	rb_erase(&pcd->pcd_rb_tree_node,\
 		 &(tmem_system.pcd_tree_roots[firstbyte]));
 	//reinit the struct for safety for now
 	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
-	//now free up the pcd memory
+        //decrement system unique pages count
+        system_unique_pages--;
 skiprbfree:
+	//now free up the pcd memory
 	kmem_cache_free(tmem_page_content_desc_cachep, pcd);
 	//free up the system page that pcd held
 	if(system_page != NULL)

@@ -236,7 +236,7 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 		pr_info(" *** mtp | client sending RGET:PAGE to: %s for page"
 			" having firstbyte: %u, remote index: %llu |"
 			" tcp_client_remotified_get ***\n", 
-			rs->rs_ip, firstbyte, remote_id);                           
+			rs->rs_ip, firstbyte, remote_id); 
 
         memset(out_msg, 0, len+1);                                        
         snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%llu",\
@@ -258,15 +258,18 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 	*/
                 if(can_show(tcp_client_remotified_get))
                         pr_info(" *** mtp | client receiving message | "
-                                "tcp_client_remotified_get ***\n");                           
+                                "tcp_client_remotified_get ***\n");
 		ret = 
 		tcp_client_receive(conn_socket, page_vaddr, PAGE_SIZE,\
 				   MSG_DONTWAIT, 1);
+                
                 if(can_show(tcp_client_remotified_get))
                         pr_info(" *** mtp | client received: %d bytes | "
-                                "tcp_client_remotified_get ***\n", ret);                           
+                                "tcp_client_remotified_get ***\n", ret);
+
 		if(ret != PAGE_SIZE)
 			goto rget_fail;
+
 		if(can_show(tcp_client_remotified_get))
 			pr_info(" *** mtp | RGET:PAGE to: %s for page having"
 				" firstbyte: %u, remote index: %llu SUCCESS |"
@@ -385,25 +388,26 @@ snd_page_wait:
 						tmp = strsep(&p, ":");
 
 					kstrtou64(tmp, 10, remote_id);
-					//if(can_show(tcp_client_snd_page))
-					pr_info(" *** mtp | SUCCESS: page "
-						"found at: %s with ID: %llu| "
-						"tcp_client_snd_page *** \n",
-						rs->rs_ip, *remote_id);
+					if(can_show(tcp_client_snd_page))
+                                                pr_info(" *** mtp |SUCCESS: page"
+                                                        " found at: %s with ID:"
+                                                        " %llu| tcp_client_snd_"
+                                                        " page *** \n", 
+                                                        rs->rs_ip, *remote_id);
 				}
 			}
 			else if(memcmp(in_msg, "FAIL", 4) == 0)
 			{
 				if(memcmp(in_msg+5, "PAGE", 4) == 0)
 				{
-					//if(can_show(tcp_client_snd_page))
-					pr_info(" *** mtp | FAIL: page "
-						"not found at: %s | "
-						"tcp_client_snd_page *** \n", rs->rs_ip);
+					if(can_show(tcp_client_snd_page))
+                                                pr_info(" *** mtp | FAIL: page"
+                                                        " not found at: %s |"
+                                                        " tcp_client_snd_page"
+                                                        " *** \n", rs->rs_ip);
 
 					goto snd_page_fail;
 				}
-				//goto snd_page_fail;
 			}
 			else
 			{

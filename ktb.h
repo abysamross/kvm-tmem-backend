@@ -285,6 +285,7 @@ struct tmem_page_content_descriptor {
 //extern struct rb_root pcd_tree_roots[256]; // choose based on first byte of page
 //extern rwlock_t pcd_tree_rwlocks[256]; // poor man's concurrency for now
 //extern spinlock_t client_list_lock;
+extern uint64_t system_unique_pages;
 extern struct tmem_system_view tmem_system;
 
 extern struct kmem_cache* tmem_page_descriptors_cachep;

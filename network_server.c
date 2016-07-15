@@ -89,7 +89,6 @@ int tcp_listener_stopped = 0;
 int tcp_listener_started = 0;
 int tcp_acceptor_stopped = 0;
 int tcp_acceptor_started = 0;
-int timed_fwd_filter_stopped = 0;
 
 /*
 extern void *test_page_vaddr;
@@ -100,7 +99,7 @@ extern int failed_tmem_remote_dedups;
 */
 extern int pcd_remote_associate(struct page *, uint64_t *);
 extern int ktb_remote_get(struct page *, uint8_t, uint64_t);
-extern int ktb_remotify_puts(void);
+//extern int ktb_remotify_puts(void);
 //struct task_struct *fwd_bflt_thread = NULL;
 /*
 struct bloom_filter *bflt = NULL;
@@ -1012,20 +1011,21 @@ bfltresp:
 							strlen(out_buf),\
 							MSG_DONTWAIT);
 
-					if(can_show(connection_handler))
-						pr_info(" *** mtp | sending test"
-							" page | "
-							"connection_handler *** \n");
-
+                                        /*
 					if(memcmp(out_buf, "DONE:BFLT", 9) == 0)
 					{
 						if(ktb_remotify_puts() < 0)
 							break;
 					}
+                                        */
 					/*
-					   if(test_page != NULL)
-					   snd_page(test_page);
-					   */
+                                        if(can_show(connection_handler))
+                                                pr_info(" *** mtp | sending test"
+                                                        " page | "
+                                                        "connection_handler *** \n");
+                                        if(test_page != NULL)
+                                                snd_page(test_page);
+					*/
 				}
 				else if(memcmp(in_buf+5, "PAGE", 4) == 0)
 				{
