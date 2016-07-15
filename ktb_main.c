@@ -262,7 +262,6 @@ int start_eviction_thread(void)
 /******************************************************************************/
 /*							  ktb helper functions*/
 /******************************************************************************/
-
 //Get a client with client ID if one exists
 struct tmem_client* ktb_get_client_by_id(int client_id)
 {
@@ -879,10 +878,13 @@ out:
 
 int ktb_remotify_puts(void)
 {
-        struct tmem_page_content_descriptor *pcd = NULL;
-        struct tmem_page_content_descriptor *nexpcd = NULL;
         int succ_count = 0;
         int count = 0;
+        unsigned long jleft = 0;
+        struct tmem_page_content_descriptor *pcd = NULL;
+        struct tmem_page_content_descriptor *nexpcd = NULL;
+
+        DECLARE_WAIT_QUEUE_HEAD(remotify_wait);
         /* 
          * FOR NOW: every time our bloom filter is send across, for each pcd in 
          * rscl we explore the option of remote deduplication without bothering
@@ -918,138 +920,142 @@ int ktb_remotify_puts(void)
          *      }
          * }
          */
-
-        read_lock(&(tmem_system.system_list_rwlock));
-
-        if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
+        jleft = wait_event_timeout(remotify_wait,\
+                (system_unique_pages >= MAX_SYS_PAGES), 10*HZ)
         {
-                read_unlock(&(tmem_system.system_list_rwlock));
-                return 1;
-        }
 
-        list_for_each_entry_safe(pcd, nexpcd,\
-                        &(tmem_system.remote_sharing_candidate_list),\
-                        system_rscl_pcds)
-        {
-                bool bloom_res;
-                //bool rdedup = false;
-                uint8_t firstbyte;
-                struct remote_server *rs;
-                struct page *page = alloc_page(GFP_ATOMIC);
-                void *vaddr1, *vaddr2;
-                uint64_t remote_id;
+                read_lock(&(tmem_system.system_list_rwlock));
 
-                count++;
-                tmem_remotify_puts++;
-
-                vaddr1 = page_address(page);
-                memset(vaddr1, 0, PAGE_SIZE);
-                firstbyte = tmem_get_first_byte(pcd->system_page);
-
-                read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-
-                vaddr2 = page_address(pcd->system_page);
-                memcpy(vaddr1, vaddr2, PAGE_SIZE);
-
-                if(can_debug(ktb_remotify_puts))
-                        pr_info(" *** mtp | details of pcd to be remotified."
-                                        " firstbyte: %u, status: %d, remote_ip: %s,"
-                                        " remote_id: %llu, sys_page: %s |"
-                                        " ktb_remotify_puts ***\n", pcd->firstbyte,
-                                        pcd->status, pcd->remote_ip, pcd->remote_id,
-                                        (pcd->system_page == NULL)?"NULL":"NOT NULL");
-
-                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-                read_unlock(&(tmem_system.system_list_rwlock));
-
-                //read_lock(&rs_rwspinlock);
-                down_read(&rs_rwmutex);
-                if((list_empty(&rs_head)))
+                if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
                 {
-                        up_read(&rs_rwmutex);
+                        read_unlock(&(tmem_system.system_list_rwlock));
                         return 1;
                 }
 
-                list_for_each_entry(rs, &(rs_head), rs_list)
+                list_for_each_entry_safe(pcd, nexpcd,\
+                                &(tmem_system.remote_sharing_candidate_list),\
+                                system_rscl_pcds)
                 {
-                        if(bloom_filter_check(rs->rs_bflt, &firstbyte, 1,\
-                                                &bloom_res) < 0)
+                        bool bloom_res;
+                        //bool rdedup = false;
+                        uint8_t firstbyte;
+                        struct remote_server *rs;
+                        struct page *page = alloc_page(GFP_ATOMIC);
+                        void *vaddr1, *vaddr2;
+                        uint64_t remote_id;
+
+                        count++;
+                        tmem_remotify_puts++;
+
+                        vaddr1 = page_address(page);
+                        memset(vaddr1, 0, PAGE_SIZE);
+                        firstbyte = tmem_get_first_byte(pcd->system_page);
+
+                        read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+
+                        vaddr2 = page_address(pcd->system_page);
+                        memcpy(vaddr1, vaddr2, PAGE_SIZE);
+
+                        if(can_debug(ktb_remotify_puts))
+                                pr_info(" *** mtp | details of pcd to be remotified."
+                                                " firstbyte: %u, status: %d, remote_ip: %s,"
+                                                " remote_id: %llu, sys_page: %s |"
+                                                " ktb_remotify_puts ***\n", pcd->firstbyte,
+                                                pcd->status, pcd->remote_ip, pcd->remote_id,
+                                                (pcd->system_page == NULL)?"NULL":"NOT NULL");
+
+                        read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                        read_unlock(&(tmem_system.system_list_rwlock));
+
+                        //read_lock(&rs_rwspinlock);
+                        down_read(&rs_rwmutex);
+                        if((list_empty(&rs_head)))
                         {
-                                if(can_show(ktb_remotify_puts))
-                                        pr_info(" *** mtp | checking for rscl object"
-                                                        " in bloom filter failed |"
-                                                        " ktb_remotify_puts *** \n");
+                                up_read(&rs_rwmutex);
+                                return 1;
                         }
 
-                        if(bloom_res == true)
+                        list_for_each_entry(rs, &(rs_head), rs_list)
                         {
-                                if(can_show(ktb_remotify_puts))
-                                        pr_info(" *** mtp | the rscl object IS PRESENT in"
-                                                        " BFLT of RS: %s | ktb_remotify_puts *** \n",
-                                                        rs->rs_ip);
-
-                                /**/
-                                if(tcp_client_snd_page(rs, page, &remote_id) < 0 )
+                                if(bloom_filter_check(rs->rs_bflt, &firstbyte, 1,\
+                                                        &bloom_res) < 0)
                                 {
-                                        failed_tmem_remotify_puts++;
                                         if(can_show(ktb_remotify_puts))
-                                                pr_info(" *** mtp | page was NOT FOUND at RS:"
-                                                                " %s bflt | ktb_remotify_puts *** \n", 
-                                                                rs->rs_ip); 
+                                                pr_info(" *** mtp | checking for rscl object"
+                                                                " in bloom filter failed |"
+                                                                " ktb_remotify_puts *** \n");
+                                }
+
+                                if(bloom_res == true)
+                                {
+                                        if(can_show(ktb_remotify_puts))
+                                                pr_info(" *** mtp | the rscl object IS PRESENT in"
+                                                                " BFLT of RS: %s | ktb_remotify_puts *** \n",
+                                                                rs->rs_ip);
+
+                                        /**/
+                                        if(tcp_client_snd_page(rs, page, &remote_id) < 0 )
+                                        {
+                                                failed_tmem_remotify_puts++;
+                                                if(can_show(ktb_remotify_puts))
+                                                        pr_info(" *** mtp | page was NOT FOUND at RS:"
+                                                                        " %s bflt | ktb_remotify_puts *** \n", 
+                                                                        rs->rs_ip); 
+                                        }
+                                        else
+                                        {
+                                                succ_count++;
+                                                if(can_show(ktb_remotify_puts))
+                                                        pr_info(" *** mtp | page was FOUND at RS: %s, with"
+                                                                        " ID: %llu | ktb_remotify_puts *** \n",
+                                                                        rs->rs_ip, remote_id);
+
+                                                /*
+                                                   tmem_remotified_pcd_status_update(pcd, firstbyte,\
+                                                   remote_id, rs->rs_ip, &rdedup);
+                                                   */
+                                                tmem_remotified_pcd_status_update(pcd, firstbyte,\
+                                                                remote_id, rs->rs_ip);
+                                                //rdedup = true;
+                                                break;
+                                        }
                                 }
                                 else
                                 {
-                                        succ_count++;
                                         if(can_show(ktb_remotify_puts))
-                                                pr_info(" *** mtp | page was FOUND at RS: %s, with"
-                                                                " ID: %llu | ktb_remotify_puts *** \n",
-                                                                rs->rs_ip, remote_id);
-
-                                        /*
-                                        tmem_remotified_pcd_status_update(pcd, firstbyte,\
-                                                        remote_id, rs->rs_ip, &rdedup);
-                                        */
-                                        tmem_remotified_pcd_status_update(pcd, firstbyte,\
-                                                        remote_id, rs->rs_ip);
-                                        //rdedup = true;
-                                        break;
+                                                pr_info(" *** mtp | the rscl object is NOT PRESENT in"
+                                                                " BFLT of RS: %s | ktb_remotify_puts *** \n",
+                                                                rs->rs_ip);
                                 }
                         }
-                        else
+                        up_read(&rs_rwmutex);
+                        __free_page(page);
+
+                        /*
+                           if(rdedup == true)
+                           __free_page(pcd->system_page);
+                           */
+
+                        if(can_show(ktb_remotify_puts))
                         {
-                                if(can_show(ktb_remotify_puts))
-                                        pr_info(" *** mtp | the rscl object is NOT PRESENT in"
-                                                        " BFLT of RS: %s | ktb_remotify_puts *** \n",
-                                                        rs->rs_ip);
+                                pr_info(" *** mtp | # unique system pages: %llu| ktb_remotify_puts"
+                                                " *** \n", system_unique_pages);
+                                pr_info(" *** mtp | # remote lookups: %d| ktb_remotify_puts"
+                                                " *** \n", count);
+                                pr_info(" *** mtp | remote lookups succeeded: %d|"
+                                                " ktb_remotify_puts *** \n", succ_count);
                         }
+
+                        if(kthread_should_stop())
+                        {
+                                ktb_eviction_thread_stopped = 1;
+                                return 0;
+                        }
+
+                        read_lock(&(tmem_system.system_list_rwlock));
                 }
-                up_read(&rs_rwmutex);
-                __free_page(page);
-
-                /*
-                if(rdedup == true)
-                        __free_page(pcd->system_page);
-                */
-
-                if(can_show(ktb_remotify_puts))
-                {
-                        pr_info(" *** mtp | # unique system pages: %llu| ktb_remotify_puts"
-                                        " *** \n", system_unique_pages);
-                        pr_info(" *** mtp | # remote lookups: %d| ktb_remotify_puts"
-                                        " *** \n", count);
-                        pr_info(" *** mtp | remote lookups succeeded: %d|"
-                                        " ktb_remotify_puts *** \n", succ_count);
-                }
-
-                if(kthread_should_stop())
-                {
-                        ktb_eviction_thread_stopped = 1;
-                        return 0;
-                }
-
-                read_lock(&(tmem_system.system_list_rwlock));
+                read_unlock(&(tmem_system.system_list_rwlock));
         }
-        read_unlock(&(tmem_system.system_list_rwlock));
 
         return 0;
 }

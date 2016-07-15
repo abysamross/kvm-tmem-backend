@@ -295,11 +295,11 @@ int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
 			uint64_t *remote_id)
 {
 	int ret = 0, len = 49;
+        unsigned long jleft = 0;
 	char in_msg[len+1];
 	char out_msg[len+1];
 	void *vaddr;
 	struct socket *conn_socket; 
-        unsigned long jleft = 0;
 
 	DECLARE_WAIT_QUEUE_HEAD(page_wait);                               
 

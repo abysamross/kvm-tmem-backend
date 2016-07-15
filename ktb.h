@@ -8,6 +8,7 @@
 #include <linux/list.h>
 #include <linux/tmem.h>
 
+#define MAX_SYS_PAGES (1UL << 17)
 #define LOCAL_CLIENT ((uint16_t) - 1)
 #define TMEM_CLIENT 1
 #define MAX_CLIENTS 16
