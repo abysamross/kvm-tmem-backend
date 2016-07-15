@@ -79,6 +79,7 @@ int debug_timed_fwd_filter = 0;
 int debug_ktb_remotify_puts = 0;
 int debug_pcd_add_to_remote_tree = 0;
 int debug_tmem_remotified_pcd_status_update = 0;
+int debug_ktb_remote_get = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -105,6 +106,7 @@ int show_msg_timed_fwd_filter = 0;
 int show_msg_ktb_remotify_puts = 0;
 int show_msg_pcd_add_to_remote_tree = 0;
 int show_msg_tmem_remotified_pcd_status_update = 0;
+int show_msg_ktb_remote_get = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
 /******************************************************************************/ 
@@ -589,10 +591,15 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         void *vaddr1, *vaddr2;
         struct tmem_page_content_descriptor *pcd;
         struct radix_tree_root *root = 
-                &(tmem_system.pcd_remote_tree_roots[firstbyte]);
+        &(tmem_system.pcd_remote_tree_roots[firstbyte]);
 
         vaddr1 = page_address(page);
         memset(vaddr1, 0, PAGE_SIZE);
+
+        if(can_show(ktb_remote_get))
+                pr_info(" *** mtp | Looking for remote page with remote id: %lu"
+                        " in pcd_remote_tree_roots[%u] | ktb_remote_get ***\n",
+                        id, firstbyte);
 
         read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
         read_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
@@ -619,6 +626,11 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         vaddr2 = page_address(pcd->system_page);
         memcpy(vaddr1, vaddr2, PAGE_SIZE);
         succ_gets_from_remote++;
+
+        if(can_show(ktb_remote_get))
+                pr_info(" *** mtp | remote page: %lu was present in"
+                        " pcd_remote_tree_roots[%u] | ktb_remote_get ***\n", id,
+                        firstbyte);
 
 rget_unlock:
 
@@ -2149,11 +2161,10 @@ static int __init ktb_main_init(void)
            debug(ktb_get_page);
            debug(ktb_flush_page);
            debug(ktb_flush_object);
-           */
-        debug(ktb_destroy_pool);
-        debug(ktb_destroy_client);
-        debug(ktb_remotified_get_page);
-        debug(ktb_remotify_puts);
+           debug(ktb_destroy_pool);
+           debug(ktb_destroy_client);
+           debug(ktb_remotify_puts);
+        */
         //end en/dis-able ktb_main.c debug
 
         //-------------------------
@@ -2169,11 +2180,12 @@ static int __init ktb_main_init(void)
            debug(pcd_add_to_remote_tree);
            debug(tmem_pgp_free_data);
            debug(pcd_disassociate);
+           debug(pcd_remote_associate);
+           debug(ktb_remotify_puts);
+           debug(timed_fwd_filter);
         */
-        debug(pcd_remote_associate);
         debug(ktb_remotified_get_page);
-        debug(ktb_remotify_puts);
-        debug(timed_fwd_filter);
+        debug(ktb_remote_get);
         // end en/dis-able tmem.c debug
 
         //---------------------------
@@ -2201,20 +2213,21 @@ static int __init ktb_main_init(void)
            show_msg(ktb_get_page);
            show_msg(ktb_flush_page);
            show_msg(ktb_flush_object);
-           */
+           show_msg(ktb_destroy_pool);
+           show_msg(ktb_destroy_client);
+           show_msg(ktb_remotify_puts);
+        */
         show_msg(ktb_remotified_get_page);
-        show_msg(ktb_destroy_pool);
-        show_msg(ktb_destroy_client);
-        show_msg(ktb_remotify_puts);
+        show_msg(ktb_remote_get);
         //end en/dis-able ktb_main.c output
 
         //-------------------------
         //en/dis-able tmem.c output
         //-------------------------
         //show_msg(pcd_associate);
-        show_msg(pcd_remote_associate);
-        show_msg(timed_fwd_filter);
         /*
+           show_msg(pcd_remote_associate);
+           show_msg(timed_fwd_filter);
            show_msg(pcd_disassociate);
            show_msg(tmem_pgp_free_data);
            show_msg(pcd_add_to_remote_tree);
@@ -2223,7 +2236,7 @@ static int __init ktb_main_init(void)
            show_msg(tmem_pool_destroy_objs);
            show_msg(custom_radix_tree_destroy);
            show_msg(custom_radix_tree_node_destroy);
-           */
+        */
         // end en/dis-able tmem.c output
 
         //---------------------------
@@ -2240,7 +2253,7 @@ static int __init ktb_main_init(void)
         // end en/dis-able bloom_filter.c output
         return 0;
 
-        /*
+/*
 netfail:
 vfree(tmem_system_bloom_filter);
 init_bflt_alg_fail:

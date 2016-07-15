@@ -877,13 +877,13 @@ int tcp_client_init(void)
         show_msg(tcp_client_connect_rs); 
         show_msg(tcp_client_connect); 
         show_msg(tcp_client_fwd_filter); 
-	*/
         show_msg(tcp_client_snd_page); 
+	*/
         show_msg(tcp_client_remotified_get);
 
-        debug(tcp_client_snd_page); 
         debug(tcp_client_remotified_get);
         /*
+        debug(tcp_client_snd_page); 
         debug(tcp_client_send);
         debug(tcp_client_receive); 
         debug(tcp_client_fwd_filter); 

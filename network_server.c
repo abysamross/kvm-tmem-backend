@@ -1580,17 +1580,17 @@ int network_server_init(void)
         show_msg(tcp_server_start); 
         show_msg(receive_bflt); 
         show_msg(rcv_and_cmp_page);
+        show_msg(compare_page);
         */
         show_msg(get_remote_page);
-        show_msg(compare_page);
         /*
         show_msg(rcv_and_cmp_page);
 	*/
 
-        debug(rcv_and_cmp_page);
-        debug(compare_page);
         debug(get_remote_page);
 	/*
+        debug(rcv_and_cmp_page);
+        debug(compare_page);
         debug(tcp_server_send);
         debug(tcp_server_receive);
         debug(register_rs);
