@@ -7,8 +7,17 @@
 #include <linux/radix-tree.h>
 #include <linux/list.h>
 #include <linux/tmem.h>
-
-#define MAX_SYS_PAGES (1UL << 17)
+/* 
+ * 2^14 pages = 2^26 B = 64 MB 
+ * 3*(2^12) pages = 3*(2^24) B = 48 MB 
+ * plan is to reduce the no. of pages held in 
+ * the backend to 16 MB worth memory when the 
+ * backend memory usage exceeds 64 MB.
+ * i.e 64 MB - 48 MB = 16 MB
+ */
+#define MAX_SYS_PAGES (1ULL << 14)
+//#define REDUCE_SYS_PAGES_BY (3*(1ULL << 12))
+#define REDUCE_SYS_PAGES_BY (3ULL << 12)
 #define LOCAL_CLIENT ((uint16_t) - 1)
 #define TMEM_CLIENT 1
 #define MAX_CLIENTS 16
@@ -342,7 +351,7 @@ extern int pcd_remote_associate(struct page*, uint64_t*);
 
 /*update status of remotified page*/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor*,\
-				       uint8_t, uint64_t, char*);//bool*);
+				       uint8_t, uint64_t, char*, bool*);
 
 /*custom radix_tree_destroy function*/
 //bool  __radix_tree_delete_node(struct radix_tree_root*,struct radix_tree_node*);

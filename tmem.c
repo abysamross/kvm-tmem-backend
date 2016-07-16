@@ -268,7 +268,7 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /******************************************************************************/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 				       uint8_t firstbyte, uint64_t remote_id,
-				       char *rs_ip)//bool *rdedup)
+				       char *rs_ip, bool *res)
 {
 	char *ip = NULL;
 	ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
@@ -330,6 +330,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         pcd->system_page = NULL;
         succ_tmem_remotify_puts++;
         system_unique_pages--;
+	*res = true;
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 getout:
