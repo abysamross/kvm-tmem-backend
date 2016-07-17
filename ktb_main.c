@@ -2461,7 +2461,7 @@ sysfssucc:
 	//---------------------------
 	//en/dis-able remote.c output
 	//---------------------------
-	show_msg(update_bflt);
+	//show_msg(update_bflt);
 	// end en/dis-able remote.c output
 
 	//---------------------------
