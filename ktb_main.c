@@ -988,15 +988,17 @@ int ktb_remotify_puts(void)
 	 *
 	 *      }
 	 * }
-	 */
         pr_info(" *** mtp | started eviction thread |"
-                " start_eviction_thread ***\n");
+                " ktb_remotify_puts ***\n");
+	 */
 restartthread:
 
 	while(!kthread_should_stop())
 	{
+                /*
                 pr_info(" *** mtp | eviction thread firing |"
-                        " start_eviction_thread ***\n");
+                        " ktb_remotify_puts ***\n");
+                */
 
 		set_current_state(TASK_INTERRUPTIBLE);
 
@@ -2277,7 +2279,7 @@ sysfssucc:
 				   " ktb_main_init *** \n");
 				//vfree(tmem_system_bloom_filter);
 				*/
-				if((start_eviction_thread) < 0)
+				if(start_eviction_thread() < 0)
 					pr_info(" *** mtp | network server unable to"
 							" start ktb_eviction_thread |"
 							" ktb_main_init *** \n");
