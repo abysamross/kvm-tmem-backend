@@ -277,9 +277,9 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
         /* in case there was a race at ktb_remotify_puts and
-         * pcd_remote_associate
+         * pcd_remote_associate/pcd_associate
          */
-        if(pcd->status == 1)
+        if(pcd->status == 1 || !list_empty(&pcd->system_lol_pcds))
         {
                 failed_tmem_remotify_puts++;
                 goto getout;
