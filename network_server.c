@@ -380,13 +380,19 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 				" id: %llu PAGE NOT FOUND | get_remote_page ***\n",
 				firstbyte, id);                           
 
-		goto rget_fail_re;
+		goto rget_free;
 	}
 	else if(ret == 0)
 	{
 		ret = 
 		kernel_sendpage(conn->accept_socket, new_page, 0,\
 				PAGE_SIZE, MSG_DONTWAIT);
+
+		if(can_show(get_remote_page))
+			pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
+				" id: %llu PAGE FOUND | get_remote_page ***\n",
+				firstbyte, id);                           
+
 	}
 
         if(ret != PAGE_SIZE)
@@ -394,7 +400,7 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 		msleep(5000);
 		memset(out_msg, 0, len+1);        
 		strcat(out_msg, "FAIL");
-		goto rget_fail;
+		goto rget_free;
 	}
 	else if(ret == PAGE_SIZE)
 	{
@@ -404,7 +410,12 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 				firstbyte, id);                           
 	}
 
+        __free_page(new_page);
 	return;
+
+rget_free:
+
+        __free_page(new_page);
 
 rget_fail:
 
@@ -412,8 +423,6 @@ rget_fail:
 		pr_info(" *** mtp | RGET:PAGE with firstbyte: %u,"
 			" id: %llu FAILED | get_remote_page ***\n",
 			firstbyte, id);                           
-rget_fail_re:
-
 	ret = 
 	tcp_server_send(conn->accept_socket, out_msg, strlen(out_msg), MSG_DONTWAIT);
 
@@ -1054,6 +1063,7 @@ pageresp:
 			}
 			else if(memcmp(in_buf, "RGET", 4) == 0)
 			{
+                                pr_info(" ### RGET### RGET### RGET### RGET\n");
 				conn_data->in_buf = in_buf;
 				get_remote_page(conn_data);
 			}

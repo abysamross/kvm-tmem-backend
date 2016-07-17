@@ -226,7 +226,7 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
         void *page_vaddr;
         struct socket *conn_socket; 
 
-        //DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
+        DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
 
         conn_socket = rs->lcc_socket;
 	page_vaddr = page_address(page);
@@ -248,14 +248,12 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 	 * kernel_recvmsg calls or it receives an explicit FAIL.
 	 */
 
-	/*
         wait_event_timeout(rget_wait,\
                            !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                           10*HZ);   
+                           5*HZ);   
 
         if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
         {
-	*/
                 if(can_show(tcp_client_remotified_get))
                         pr_info(" *** mtp | client receiving message | "
                                 "tcp_client_remotified_get ***\n");
@@ -275,11 +273,9 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 				" firstbyte: %u, remote index: %llu SUCCESS |"
 				" tcp_client_remotified_get ***\n", rs->rs_ip,
 				firstbyte, remote_id);                           
-	/*
         }
         else                                                              
                 goto rget_fail;                                                  
-	*/
         return 0;
 
 rget_fail:

@@ -355,11 +355,13 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         struct page *page = NULL;
 
         page = alloc_page(GFP_ATOMIC);
-        vaddr = page_address(page);
-        memset(vaddr, 0, PAGE_SIZE);
 
         if(page == NULL)
                 goto exit_remote;
+
+        vaddr = page_address(page);
+        memset(vaddr, 0, PAGE_SIZE);
+
 
 	read_lock(&(tmem_system.system_list_rwlock));
 	remote_id = pcd->remote_id;	
@@ -371,7 +373,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 	ktb_remotified_get_page(page, remote_ip, firstbyte, remote_id); 
 
         if(ret < 0)
-                goto exit_remote;
+                goto free_exit_remote;
 
 	ret = tmem_copy_to_client(client_page, page);
 
@@ -380,10 +382,9 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         else
                 failed_tmem_remotified_gets++;
 
+free_exit_remote: 
         __free_page(page);
-
 exit_remote:
-
         return ret;
 }
 
