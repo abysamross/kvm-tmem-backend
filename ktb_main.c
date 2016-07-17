@@ -313,7 +313,11 @@ int start_eviction_thread(void)
 		kthread_run((void *)ktb_remotify_puts, NULL, "ktb_eviction_thread");
 
 	if(ktb_eviction_thread == NULL)
+        {
+                pr_info(" *** mtp | could not start eviction thread |"
+                        " start_eviction_thread ***\n");
 		return -1;
+        }
 
 	get_task_struct(ktb_eviction_thread);
 
@@ -985,17 +989,22 @@ int ktb_remotify_puts(void)
 	 *      }
 	 * }
 	 */
+        pr_info(" *** mtp | started eviction thread |"
+                " start_eviction_thread ***\n");
 restartthread:
 
 	while(!kthread_should_stop())
 	{
+                pr_info(" *** mtp | eviction thread firing |"
+                        " start_eviction_thread ***\n");
+
 		set_current_state(TASK_INTERRUPTIBLE);
 
 		jleft = schedule_timeout(7*HZ);
 
 		if(can_show(ktb_remotify_puts)) 
 			pr_info(" *** mtp | Timeout Expired: %lu |"
-					" ktb_remotify_puts ***\n", jleft);
+                                " ktb_remotify_puts ***\n", jleft);
 
 		//__set_current_state(TASK_RUNNING);
 
