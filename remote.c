@@ -104,8 +104,13 @@ void update_bflt(struct tmem_page_content_descriptor* pcd)
                         " failed | update_bflt *** \n"); 
 
         if(bloom_res == false)
-                pr_info(" *** mtp | the rscl object was not set in bloom filter"
-                        " | update_bflt *** \n");
-        pr_info("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
-        return;
+        { 
+                if(can_show(update_bflt))
+                        pr_info(" *** mtp | the rscl object was not set in"
+                                " bloom filter | update_bflt *** \n");
+        }
+
+        if(can_show(update_bflt))
+                pr_info("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+        return; 
 }
