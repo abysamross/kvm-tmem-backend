@@ -424,7 +424,8 @@ rget_fail:
 			" id: %llu FAILED | get_remote_page ***\n",
 			firstbyte, id);                           
 	ret = 
-	tcp_server_send(conn->accept_socket, out_msg, strlen(out_msg), MSG_DONTWAIT);
+	tcp_server_send(conn->accept_socket, out_msg, strlen(out_msg),\
+                        MSG_DONTWAIT);
 
 	return;
 }

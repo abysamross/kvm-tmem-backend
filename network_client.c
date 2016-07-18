@@ -276,6 +276,7 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
         }
         else                                                              
                 goto rget_fail;                                                  
+
         return 0;
 
 rget_fail:

@@ -369,11 +369,18 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 	firstbyte = pcd->firstbyte;
 	read_unlock(&(tmem_system.system_list_rwlock));
 
+        pr_info(" *** mtp | getting remotified page with firstbyte: %u, ip: %s,"
+                " id: %llu | tmem_remotified_copy_to_client *** \n",
+                firstbyte, remote_ip, remote_id);
         ret = 
 	ktb_remotified_get_page(page, remote_ip, firstbyte, remote_id); 
 
         if(ret < 0)
                 goto free_exit_remote;
+
+        pr_info(" *** mtp | got remotified page: %u, ip: %s, id: %llu |"
+                " tmem_remotified_copy_to_client *** \n",
+                firstbyte, remote_ip, remote_id);
 
 	ret = tmem_copy_to_client(client_page, page);
 
@@ -413,7 +420,15 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
 	{
                 tmem_remotified_gets++;
 		read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                pr_info(" *** mtp |issuing remotified copy to client for page"
+                        " with firstbyte: %u | tmem_pcd_copy_to_client *** \n",
+                        firstbyte);
+
 		ret = tmem_remotified_copy_to_client(client_page, pcd);
+
+                pr_info(" *** mtp |remotified copy to client for page"
+                        " with firstbyte: %u returned| tmem_pcd_copy_to_client *** \n",
+                        firstbyte);
 	}
 
 	return ret;

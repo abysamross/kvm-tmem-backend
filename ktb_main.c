@@ -732,8 +732,15 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 	int ret = -1;
 	struct remote_server *rs_tmp;
 
+        pr_info(" *** mtp | trying to get remotified page from: %s, with id:"
+                " %llu having firstbyte: %u,| ktb_remotified_get_page ***\n",
+                ip, remote_id, firstbyte);
+
 	down_read(&rs_rwmutex);
 	//read_lock(&rs_rwspinlock);
+        pr_info(" *** mtp | down_read SUCC: trying to get remotified page "
+                " from: %s, with id: %llu having firstbyte: %u,|"
+                " ktb_remotified_get_page ***\n", ip, remote_id, firstbyte);
 	if(!(list_empty(&rs_head)))
 	{
 		list_for_each_entry(rs_tmp, &(rs_head), rs_list)
@@ -743,7 +750,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 
 			if(strcmp(rs_tmp->rs_ip, ip) == 0)
 			{
-				if(can_debug(ktb_remotified_get_page))
+				if(can_show(ktb_remotified_get_page))
 					pr_info(" *** mtp | found remote server "
 							"info:\n | ip-> %s | port-> %d "
 							"| ktb_remotified_get_page ***\n", 
@@ -772,7 +779,12 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 				}
 
 				up_read(&rs_rwmutex);
-				return ret;
+                                pr_info(" *** mtp | up_read SUCC: trying to"
+                                        " get remotified page from: %s, with"
+                                        " id: %llu having firstbyte: %u,|"
+                                        " ktb_remotified_get_page ***\n", ip,
+                                        remote_id, firstbyte);
+                                return ret;
 			}
 			//read_lock(&rs_rwspinlock);
 			//down_read(&rs_rwmutex);
@@ -781,6 +793,11 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 	//else
 	//read_unlock(&rs_rwspinlock);
 	up_read(&rs_rwmutex);
+        pr_info(" *** mtp | up_read SUCC: trying to"
+                " get remotified page from: %s, with"
+                " id: %llu having firstbyte: %u,|"
+                " ktb_remotified_get_page ***\n", ip,
+                remote_id, firstbyte);
 	return ret;
 }
 
@@ -1128,7 +1145,7 @@ restartthread:
 					}
 					else
 					{
-						succ_count++;
+						//succ_count++;
 						if(can_show(ktb_remotify_puts))
 							pr_info(" *** mtp | page was FOUND at RS: %s, with"
 									" ID: %llu | ktb_remotify_puts *** \n",
@@ -1156,6 +1173,7 @@ restartthread:
 
 			if((res == true) )
 			{
+                                succ_count++;
 				if(evict_status == 1)
 					--sevict_count;
 				else if(evict_status == 2)
@@ -1165,10 +1183,10 @@ restartthread:
 			if(can_show(ktb_remotify_puts)) 
 			{ 
 				pr_info(" *** mtp | #unique system pages: %llu,"
-						" dynamic_eviction enabled: %s, dynamic_evict_count:"
-						" %lld, static_evict_count: %lld | ktb_remotify_puts"
-						" *** \n", system_unique_pages, dynamic_eviction?"yes":"no",
-						devict_count, sevict_count);
+                                        " dynamic_eviction enabled: %s, dynamic_evict_count:"
+                                        " %lld, static_evict_count: %lld | ktb_remotify_puts"
+                                        " *** \n", system_unique_pages, dynamic_eviction?"yes":"no",
+                                        devict_count, sevict_count);
 
 				pr_info(" *** mtp | #remote lookups: %llu| ktb_remotify_puts" 
 						" *** \n", count); 
