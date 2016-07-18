@@ -255,8 +255,10 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
         if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
         {
                 if(can_show(tcp_client_remotified_get))
-                        pr_info(" *** mtp | client receiving message | "
-                                "tcp_client_remotified_get ***\n");
+                        pr_info(" *** mtp | client receiving message "
+                                " page_vaddr: %lx|"
+                                " tcp_client_remotified_get ***\n",
+                                (unsigned long)page_vaddr);
 		ret = 
 		tcp_client_receive(conn_socket, page_vaddr, PAGE_SIZE,\
 				   MSG_DONTWAIT, 1);
