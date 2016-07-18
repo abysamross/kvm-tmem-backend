@@ -449,15 +449,15 @@ bflt_resend:
                 pr_info(" *** mtp | client sending FRWD:BFLT | "
                         "tcp_client_fwd_filter ***\n");                           
 
+        /*
         mutex_lock(&bflt->lock);
 
-        /*
         for(i = 0; i < bflt->bitmap_size; i++)
                 if(test_bit(i, bflt->bitmap))
                         pr_info("bit: %d of bflt is set\n", i);
-        */
 
         mutex_unlock(&bflt->lock);
+        */
 
         size = BITS_TO_LONGS(bflt->bitmap_size)*sizeof(unsigned long);
 
