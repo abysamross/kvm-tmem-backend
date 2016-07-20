@@ -2248,7 +2248,7 @@ sysfssucc:
 				if(tcp_acceptor_started && !tcp_acceptor_stopped)
 				{
 					ret = 
-						kthread_stop(tcp_server->accept_thread);
+					kthread_stop(tcp_server->accept_thread);
 
 					if(!ret)
 						pr_info(" *** mtp | stopping"
@@ -2257,7 +2257,7 @@ sysfssucc:
 								" could not setup a"
 								" connection with"
 								" leader server |"
-								" network_server_init"
+								" ktb_main_init"
 								" *** \n");
 				}
 
@@ -2271,7 +2271,7 @@ sysfssucc:
 								" client could not"
 								" setup a connection"
 								" with leader server"
-								" | network_server_init"
+								" | ktb_main_init"
 								" *** \n");
 
 					if(tcp_server->listen_socket != NULL)
@@ -2615,7 +2615,8 @@ static void __exit ktb_main_exit(void)
 					" | ktb_main_exit \n");
 	}
 
-	network_server_exit();
+        if(tcp_server != NULL &&  tcp_server->thread != NULL)
+                network_server_exit();
 
 	for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
 		ktb_destroy_client(cli_id);
