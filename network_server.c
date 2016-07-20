@@ -952,6 +952,10 @@ int connection_handler(void *data)
 
 				//tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
 
+                                /*
+                                 * TODO: I should think about removing these as
+                                 * these are not needed
+                                 */
 				__set_current_state(TASK_RUNNING);
 				remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
 						&recv_wait);
@@ -967,12 +971,20 @@ int connection_handler(void *data)
 
 			if(signal_pending(current))
 			{
+                                /*
+                                 * TODO: I should think about removing these as
+                                 * these are not needed
+                                 */
 				__set_current_state(TASK_RUNNING);
 				remove_wait_queue(&accept_socket->sk->sk_wq->wait,\
 						  &recv_wait);
 				goto out;
 			}
 		}
+                /*
+                 * TODO: I should think about removing these as
+                 * these are not needed
+                 */
 		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&accept_socket->sk->sk_wq->wait, &recv_wait);
 
@@ -1076,8 +1088,10 @@ pageresp:
 				drop_connection(conn_data);
 
 			}
-			/* this is aplicable only to the thread handling connection
-			 * to the leader */
+			/* 
+                         * this is aplicable only to the thread handling connection
+			 * to the leader i
+                         */
 			else if(memcmp(in_buf, "ADIOS", 5) == 0)
 			{
 				int r = 1;
