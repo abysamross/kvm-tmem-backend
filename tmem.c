@@ -966,23 +966,24 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		return;
 	}
 
+	write_lock(&(tmem_system.system_list_rwlock));
+
 	if(can_show(pcd_disassociate))
 		pr_info(" *** mtp | Diassociating page with index: %u of object:"
 			" %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
 			" of client: %u, having firstbyte: %u from it's page"
 			" content descriptor (NO MORE REF TO THIS PAGE), pcd->status: "
-			" %d |  pcd_disassociate *** \n",
+			" %d, pcd->currently: %d |  pcd_disassociate *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 			pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id, firstbyte,
-			pcd->status);
+			pcd->status, pcd->currently);
 	/*
 	 * no more references to this pcd, recycle it and the physical page.
 	 * also this pcd can be either in remote_sharing_candidate_list or
 	 * local_only_list
 	 */
-	write_lock(&(tmem_system.system_list_rwlock));
 
         /*
          * a bad bad hack which will let the pcd remain in the backend without

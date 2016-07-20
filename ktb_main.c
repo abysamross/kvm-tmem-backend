@@ -1113,10 +1113,10 @@ restartthread:
 			if(can_debug(ktb_remotify_puts))
 				pr_info(" *** mtp | details of pcd to be remotified."
 						" firstbyte: %u, status: %d, remote_ip: %s,"
-						" remote_id: %llu, sys_page: %s |"
+						" remote_id: %llu, sys_page: %s, currently: %d|"
 						" ktb_remotify_puts ***\n", pcd->firstbyte,
 						pcd->status, pcd->remote_ip, pcd->remote_id,
-						(pcd->system_page == NULL)?"NULL":"NOT NULL");
+						(pcd->system_page == NULL)?"NULL":"NOT NULL", pcd->currently);
 
 			read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
