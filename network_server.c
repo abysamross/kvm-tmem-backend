@@ -547,6 +547,7 @@ struct remote_server *register_rs(struct socket *socket, char* ip, int port)
                 return NULL;
         memset(rs, 0, sizeof(struct remote_server));
         rs->lcc_socket = socket; 
+        mutex_init(&rs->lcc_lock); 
         rs->rs_ip = ip;
         rs->rs_port = port;
         //rs->rs_bitmap = NULL;
@@ -1045,6 +1046,7 @@ bfltresp:
 					 */
 					uint64_t id;
 					conn_data->in_buf = in_buf;
+                                        pr_info(" ### PAGE### PAGE### PAGE### PAGE\n");
 					if(rcv_and_cmp_page(conn_data,&id)<0)
 						goto pagefail;
 

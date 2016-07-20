@@ -18,6 +18,7 @@
 struct remote_server
 {
 	struct socket *lcc_socket;
+        struct mutex lcc_lock;
 	/*
 	 * lcc_socket; the socket using which leader
 	 * client communicates with remote server.

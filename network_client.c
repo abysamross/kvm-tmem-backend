@@ -173,11 +173,11 @@ read_again:
                  * and receive_bflt() from getting hung up if 
                  * tcp_client_remotified_get() couldn't a timely response from
                  * other end. God knows if this will break something else!
-                 */
                 if(count < 0)
                         goto recv_out;
 
                 count--;
+                 */
 
                 if(can_debug(tcp_client_receive))
                         pr_info(" *** mtp | error while reading: %d | "
@@ -253,6 +253,9 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
         memset(out_msg, 0, len+1);                                        
         snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%llu",\
 		 firstbyte, remote_id);
+
+        mutex_lock(&rs->lcc_lock);
+
         tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
 	/* 
 	 * chose not to have a wait queue here, as page receive is a huge
@@ -291,9 +294,13 @@ int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
         else                                                              
                 goto rget_fail;                                                  
 
+        mutex_unlock(&rs->lcc_lock);
         return 0;
 
 rget_fail:
+
+        mutex_unlock(&rs->lcc_lock);
+
 	if(can_show(tcp_client_remotified_get))
 		pr_info(" *** mtp | RGET:PAGE to: %s for page having"
 			" firstbyte: %u, remote index: %llu FAILED |"
@@ -322,6 +329,9 @@ int tcp_client_snd_page(struct remote_server *rs, struct page *page,\
 
 	memset(out_msg, 0, len+1);                                        
 	snprintf(out_msg, sizeof(out_msg), "RECV:PAGE");
+
+        mutex_lock(&rs->lcc_lock);
+
 	tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
 
 snd_page_wait:
@@ -435,10 +445,12 @@ snd_page_wait:
 		goto snd_page_fail;
 	}
 
+        mutex_unlock(&rs->lcc_lock);
 	return 0;
 
 snd_page_fail:
 
+        mutex_unlock(&rs->lcc_lock);
 	return -1;
 }
 
