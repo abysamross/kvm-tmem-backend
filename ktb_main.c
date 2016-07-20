@@ -1067,11 +1067,13 @@ restartthread:
 		
 		//read_lock(&(tmem_system.system_list_rwlock));
 		write_lock(&(tmem_system.system_list_rwlock));
+                pr_info("system_list_rwlock LOCKED ktb_remotify_puts \n");
 
 		if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
 		{
 			//read_unlock(&(tmem_system.system_list_rwlock));
 		        write_unlock(&(tmem_system.system_list_rwlock));
+                        pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 			goto restartthread;
 		}
 
@@ -1094,18 +1096,22 @@ restartthread:
 			memset(vaddr1, 0, PAGE_SIZE);
 			firstbyte = tmem_get_first_byte(pcd->system_page);
 
+                        /*
                         if(pcd->currently == DISASSOCIATING)
                         {
 		                write_unlock(&(tmem_system.system_list_rwlock));
                                 continue;
                         }
                         else
-                                pcd->currently = REMOTIFYING;
+                        */
+                        pcd->currently = REMOTIFYING;
 
 			//read_unlock(&(tmem_system.system_list_rwlock));
 		        write_unlock(&(tmem_system.system_list_rwlock));
+                        pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 
 			read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                        pr_info("pcd_tree_rwlocks[%u] LOCKED ktb_remotify_puts \n", firstbyte);
 
 			vaddr2 = page_address(pcd->system_page);
 			memcpy(vaddr1, vaddr2, PAGE_SIZE);
@@ -1119,6 +1125,7 @@ restartthread:
 						(pcd->system_page == NULL)?"NULL":"NOT NULL", pcd->currently);
 
 			read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED ktb_remotify_puts \n", firstbyte);
 
 			//read_lock(&rs_rwspinlock);
 			down_read(&rs_rwmutex);
@@ -1167,7 +1174,7 @@ restartthread:
 						   tmem_remotified_pcd_status_update(pcd, firstbyte,\
 						   remote_id, rs->rs_ip, &rdedup);
 						   */
-						tmem_remotified_pcd_status_update(pcd, firstbyte,\
+						tmem_remotified_pcd_status_update(pcd, nexpcd, firstbyte,\
 								remote_id, rs->rs_ip, &res);
                                                 pcd->currently = NORMAL;
 						break;
@@ -1186,12 +1193,24 @@ restartthread:
 
 			if((res == true) )
 			{
+                                pr_info("system_list_rwlock LOCKED ktb_remotify_puts \n");
                                 succ_count++;
 				if(evict_status == 1)
 					--sevict_count;
 				else if(evict_status == 2)
 					--devict_count;
 			}
+                        else
+                        {
+                                /*
+                                 * hack_safe_nexpcd:3
+                                 * to ensure that nexpcd points to a valid pcd I
+                                 * need to leave it locked
+                                 */
+		                write_lock(&(tmem_system.system_list_rwlock));
+                                list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
+                                pr_info("system_list_rwlock LOCKED ktb_remotify_puts \n");
+                        }
 
 			if(can_show(ktb_remotify_puts)) 
 			{ 
@@ -1210,6 +1229,13 @@ restartthread:
 
 			if(kthread_should_stop())
 			{
+                                /*
+                                 * hack_safe_nexpcd:4
+                                 * to ensure that nexpcd points to a valid pcd I
+                                 * had left it locked
+                                 */
+		                write_unlock(&(tmem_system.system_list_rwlock));
+                                pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 				ktb_eviction_thread_stopped = 1;
 				return 0;
 			}
@@ -1220,6 +1246,13 @@ restartthread:
 				{
 					sevict_count = 0;
 					evict_status = 0;
+                                        /*
+                                         * hack_safe_nexpcd:5
+                                         * to ensure that nexpcd points to a valid pcd I
+                                         * had left it locked
+                                         */
+		                        write_unlock(&(tmem_system.system_list_rwlock));
+                                        pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 					goto restartthread;
 				}
 			}
@@ -1229,14 +1262,22 @@ restartthread:
 				{
 					devict_count = 0;
 					evict_status = 0;
+                                        /*
+                                         * hack_safe_nexpcd:6
+                                         * to ensure that nexpcd points to a valid pcd I
+                                         * had left it locked
+                                         */
+		                        write_unlock(&(tmem_system.system_list_rwlock));
+                                        pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 					goto restartthread;
 				}
 			}
 			//read_lock(&(tmem_system.system_list_rwlock));
-			write_lock(&(tmem_system.system_list_rwlock));
+			//write_lock(&(tmem_system.system_list_rwlock));
 		}
 		//read_unlock(&(tmem_system.system_list_rwlock));
 		write_unlock(&(tmem_system.system_list_rwlock));
+                pr_info("system_list_rwlock UNLOCKED ktb_remotify_puts \n");
 	}
 
 	//__set_current_state(TASK_RUNNING);

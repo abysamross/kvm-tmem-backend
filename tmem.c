@@ -267,6 +267,7 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /*					   MAIN PCD, REMOTIFY & DEDUP ROUTINES*/
 /******************************************************************************/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
+                                       struct tmem_page_content_descriptor *nexpcd,
 				       uint8_t firstbyte, uint64_t remote_id,
 				       char *rs_ip, bool *res)
 {
@@ -308,6 +309,16 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	write_lock(&(tmem_system.system_list_rwlock));
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
+                /*
+                 * hack_safe_nexpcd:1
+                 * to ensure that nexpcd points to a valid pcd.
+                 * how will it point to invalid pcd?
+                 * bcoz I am unlocking my list after getting a ref to pcd and in
+                 * between there can be many pcd_disassociate()s
+                 * This will update the nexpcd to point to the latest valid next
+                 * pcd in list
+                 */
+                list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
 		list_del_init(&pcd->system_rscl_pcds); 
 		list_add_tail(&pcd->system_rs_pcds,\
 			      &(tmem_system.remote_shared_list));
@@ -332,7 +343,12 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         system_unique_pages--;
 	*res = true;
 
+        /*
+         * hack_safe_nexpcd:2
+         * to ensure that nexpcd points to a valid pcd I need to leave it locked
+         *
 	write_unlock(&(tmem_system.system_list_rwlock));
+         */
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	/* 
@@ -931,6 +947,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	//ASSERT_WRITELOCK(&pcd_tree_rwlocks[firstbyte]);
 	//else
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+        pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
 
 	pgp->pcd = NULL;
 	pgp->firstbyte = NOT_SHAREABLE;
@@ -963,10 +980,12 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		 */
 
 		write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                pr_info("pcd_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n", firstbyte);
 		return;
 	}
 
 	write_lock(&(tmem_system.system_list_rwlock));
+        pr_info("system_list_lock LOCKED pcd_disassociate\n");
 
 	if(can_show(pcd_disassociate))
 		pr_info(" *** mtp | Diassociating page with index: %u of object:"
@@ -993,11 +1012,16 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
          */
         if(pcd->currently == REMOTIFYING)
                 goto fail_disasso;
+        /*
         else
                 pcd->currently = DISASSOCIATING;
+        */
 
 	if(!list_empty(&pcd->system_rscl_pcds))
+        {
 		list_del_init(&pcd->system_rscl_pcds);
+                //list_replace
+        }
 	else if(!list_empty(&pcd->system_lol_pcds))
 		list_del_init(&pcd->system_lol_pcds);
 	else if(!list_empty(&pcd->system_rs_pcds))
@@ -1013,10 +1037,12 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         else if(pcd->status == 1)
 	{
 		write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+                pr_info("pcd_remote_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
 		pcd = 
 		radix_tree_delete(&(tmem_system.pcd_remote_tree_roots[firstbyte])
 				  ,pcd->remote_id);
 		write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+                pr_info("pcd_remote_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n", firstbyte);
 	}
 
 	pcd->system_page = NULL;
@@ -1044,7 +1070,9 @@ skiprbfree:
 	 */
 fail_disasso:
 	write_unlock(&(tmem_system.system_list_rwlock));
+        pr_info("system_list_lock UNLOCKED pcd_disassociate\n");
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+        pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
 }
 /******************************************************************************/
 /*					         END MAIN PCD & DEDUP ROUTINES*/
