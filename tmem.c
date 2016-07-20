@@ -865,6 +865,7 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	//Point pcd->system_page to client page contents now available in
 	//pgp->tmem_page
 	pcd->status = 0;
+        pcd->currently = NORMAL;
 	/*line below is a just for testing correctness*/
 	pcd->pgp = pgp;
 	pcd->system_page = pgp->tmem_page;
