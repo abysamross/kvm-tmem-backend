@@ -167,6 +167,18 @@ read_again:
 
         if(len == -EAGAIN || len == -ERESTARTSYS)
         {
+                /*
+                 * another hack to avoid the 
+                 * tcp_client_remotified_get(), ktb_remotify_puts() thread, 
+                 * and receive_bflt() from getting hung up if 
+                 * tcp_client_remotified_get() couldn't a timely response from
+                 * other end. God knows if this will break something else!
+                 */
+                if(count < 0)
+                        goto recv_out;
+
+                count--;
+
                 if(can_debug(tcp_client_receive))
                         pr_info(" *** mtp | error while reading: %d | "
                                 "tcp_client_receive *** \n", len);
@@ -417,7 +429,7 @@ snd_page_wait:
 	else                                                              
 	{                                                                  
 		//if(can_show(tcp_client_snd_page))
-		pr_info(" *** mtp | client RECV:PAGE:%s FAILED | "
+		pr_info(" *** mtp | client RECV:PAGE to %s FAILED | "
 			"tcp_client_snd_page ***\n", rs->rs_ip);
 
 		goto snd_page_fail;
