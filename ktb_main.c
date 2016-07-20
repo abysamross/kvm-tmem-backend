@@ -2426,11 +2426,11 @@ sysfssucc:
 	   debug(custom_radix_tree_destroy);
 	   debug(custom_radix_tree_node_destroy);
 	   debug(pcd_add_to_remote_tree);
-	   debug(tmem_pgp_free_data);
 	   debug(pcd_disassociate);
 	   debug(pcd_remote_associate);
 	   debug(timed_fwd_filter);
 	   */
+	debug(tmem_pgp_free_data);
 	debug(ktb_remotify_puts);
 	debug(ktb_remotified_get_page);
 	debug(ktb_remote_get);
@@ -2467,6 +2467,7 @@ sysfssucc:
 	show_msg(ktb_remotify_puts);
 	show_msg(ktb_remotified_get_page);
 	show_msg(ktb_remote_get);
+	show_msg(tmem_pgp_free_data);
 	//end en/dis-able ktb_main.c output
 
 	//-------------------------
@@ -2477,7 +2478,6 @@ sysfssucc:
 	   show_msg(pcd_remote_associate);
 	   show_msg(timed_fwd_filter);
 	   show_msg(pcd_disassociate);
-	   show_msg(tmem_pgp_free_data);
 	   show_msg(pcd_add_to_remote_tree);
 	   show_msg(tmem_pgp_free);
 	   show_msg(tmem_pgp_destroy);
