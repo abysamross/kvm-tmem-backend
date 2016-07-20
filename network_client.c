@@ -741,8 +741,8 @@ int tcp_client_connect(void)
         struct sockaddr_in daddr;
         struct socket *data_socket = NULL;
         */
-        unsigned char destip[5] = {10,14,15,180,'\0'};
-        //unsigned char destip[5] = {10,129,41,200,'\0'};
+        //unsigned char destip[5] = {10,14,15,180,'\0'};
+        unsigned char destip[5] = {10,129,41,200,'\0'};
         //unsigned char destip[5] = {10,14,13,217,'\0'};
         /*
         char *response = kmalloc(4096, GFP_KERNEL);
