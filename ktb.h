@@ -60,7 +60,12 @@
 /******************************************************************************/
 /*					       End declaration of debug macros*/ 
 /******************************************************************************/
-
+enum
+{
+        NORMAL,
+        DISASSOCIATING,
+        REMOTIFYING,
+};
 /******************************************************************************/
 /*				   Declaration of ktb data structures and api */ 
 /******************************************************************************/
@@ -243,6 +248,7 @@ struct tmem_system_view {
 struct tmem_page_content_descriptor {
         /*status: 0 - local, 1 - being accessed by remote, 2 - put in remote*/
         int status;
+        int currently;
 	/*
 	union 
 	{

@@ -983,6 +983,17 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	 */
 	write_lock(&(tmem_system.system_list_rwlock));
 
+        /*
+         * a bad bad hack which will let the pcd remain in the backend without
+         * anyone actually accessing it. And causing a pcd in the remote server
+         * to be moved to remote_tree without anyone actually acessing it
+         * remotely.
+         */
+        if(pcd->currently == REMOTIFYING)
+                goto fail_disasso;
+        else
+                pcd->currently = DISASSOCIATING;
+
 	if(!list_empty(&pcd->system_rscl_pcds))
 		list_del_init(&pcd->system_rscl_pcds);
 	else if(!list_empty(&pcd->system_lol_pcds))
@@ -1029,6 +1040,7 @@ skiprbfree:
 	 * ktb_destroy_client() (which will eventually call pcd_disassociate)
 	 * while accessing the pcds in the system_rscl_pcds list.
 	 */
+fail_disasso:
 	write_unlock(&(tmem_system.system_list_rwlock));
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 }

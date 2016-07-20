@@ -1065,11 +1065,13 @@ restartthread:
 			goto restartthread;
 		}
 		
-		read_lock(&(tmem_system.system_list_rwlock));
+		//read_lock(&(tmem_system.system_list_rwlock));
+		write_lock(&(tmem_system.system_list_rwlock));
 
 		if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
 		{
-			read_unlock(&(tmem_system.system_list_rwlock));
+			//read_unlock(&(tmem_system.system_list_rwlock));
+		        write_unlock(&(tmem_system.system_list_rwlock));
 			goto restartthread;
 		}
 
@@ -1092,6 +1094,17 @@ restartthread:
 			memset(vaddr1, 0, PAGE_SIZE);
 			firstbyte = tmem_get_first_byte(pcd->system_page);
 
+                        if(pcd->currently == DISASSOCIATING)
+                        {
+		                write_unlock(&(tmem_system.system_list_rwlock));
+                                continue;
+                        }
+                        else
+                                pcd->currently = REMOTIFYING;
+
+			//read_unlock(&(tmem_system.system_list_rwlock));
+		        write_unlock(&(tmem_system.system_list_rwlock));
+
 			read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 
 			vaddr2 = page_address(pcd->system_page);
@@ -1106,7 +1119,6 @@ restartthread:
 						(pcd->system_page == NULL)?"NULL":"NOT NULL");
 
 			read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-			read_unlock(&(tmem_system.system_list_rwlock));
 
 			//read_lock(&rs_rwspinlock);
 			down_read(&rs_rwmutex);
@@ -1157,6 +1169,7 @@ restartthread:
 						   */
 						tmem_remotified_pcd_status_update(pcd, firstbyte,\
 								remote_id, rs->rs_ip, &res);
+                                                pcd->currently = NORMAL;
 						break;
 					}
 				}
@@ -1219,9 +1232,11 @@ restartthread:
 					goto restartthread;
 				}
 			}
-			read_lock(&(tmem_system.system_list_rwlock));
+			//read_lock(&(tmem_system.system_list_rwlock));
+			write_lock(&(tmem_system.system_list_rwlock));
 		}
-		read_unlock(&(tmem_system.system_list_rwlock));
+		//read_unlock(&(tmem_system.system_list_rwlock));
+		write_unlock(&(tmem_system.system_list_rwlock));
 	}
 
 	//__set_current_state(TASK_RUNNING);
