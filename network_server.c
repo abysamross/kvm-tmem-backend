@@ -819,6 +819,14 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
               goto bflt_alloc_fail; 
       }
 
+      if(bflt->bitmap == NULL)
+      {
+              pr_info(" !!!server[%d] failed to allocate memory for bflt bitmap"
+                      "of rs: %s | receive_bflt !!!***\n", 
+                      conn->thread_id, ip);
+              goto bflt_alg_fail;
+      }
+
       if(bloom_filter_add_hash_alg(bflt,"crc32c"))
       {
               pr_info(" *** mtp | Adding crc32c algo to bloom filter"

@@ -307,6 +307,9 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	 * from now this page is available only in system_rs_pcds list
 	 */
 	write_lock(&(tmem_system.system_list_rwlock));
+        /*
+         * this if is not needed
+         */
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
                 /*
@@ -515,6 +518,21 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	tmem_page_size = PAGE_SIZE;
 	//Not really sure whether the below assert is required or not
 	ASSERT(!(tmem_page_size & (sizeof(uint64_t)-1)));
+        /*
+         * Even though there can be a race/concurrent access of pcds by
+         * pcd_remote_associate() and ktb_remotify_puts() i.e while
+         * ktb_remotify_puts() aquires the list lock tries to remotify pcd, but
+         * while doing the network operation unlocks the list and in this gap
+         * pcd_associate() aquires the list lock and moves it to
+         * local_only_list.  This is not a problem as the
+         * tmem_remotified_pcd_status_update() and pcd_remote_associate() are
+         * protected by the pcd_tree_rwlocks[firstbyte] lock only one,
+         * ktb_remotify_puts() or pcd_remote_associate(), will take effect on
+         * the pcd. Remember: tmem_remotified_pcd_status_update() is invoked
+         * from within ktb_remotify_puts() on finding a match at a remote server
+         * to take the pcd off pcd_remote_tree_roots[firstbyte]; out of
+         * remote_sharing_candidate_list and to put it in remote_shared_list 
+         */
 	//Accessing the pcd rb trees
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	root = &(tmem_system.pcd_tree_roots[firstbyte]);
@@ -531,7 +549,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	   pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 	   pgp->obj->pool->pool_id,
 	   pgp->obj->pool->associated_client->client_id, firstbyte);
-	   */
+	*/
 	if(can_show(pcd_remote_associate))
 		pr_info(" *** mtp | Looking to de-duplicate remote page having"
 			" firstbyte: %u | pcd_remote_associate *** \n",
@@ -674,13 +692,13 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	*/
 match:
 	/* 
-	 * If the matched pcd is a unique pcd then move it to lol list.
-	 * lol list. Hence even a remote association will result in a pcd 
-	 * being put to local_only_list because you don't want this pcd to
-	 * remotified anymore...obviously as you are already allowing a remote
-	 * machine to share it. You wouldn't want to upset that guy would you?
+         * If the matched pcd is a unique pcd then move it to lol list.  lol
+         * list. Hence even a remote association will result in a pcd being put
+         * to local_only_list because you don't want this pcd to remotified
+         * anymore...obviously as you are already allowing a remote machine to
+         * share it. You wouldn't want to upset that guy would you?
 	 */
-	write_lock(&(tmem_system.system_list_rwlock));
+        write_lock(&(tmem_system.system_list_rwlock));
 	if(!list_empty(&pcd->system_rscl_pcds))
 	{
 		list_del_init(&pcd->system_rscl_pcds); 
@@ -724,6 +742,20 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 	//Not really sure whether the below assert is required or not
 	ASSERT(!(tmem_page_size & (sizeof(uint64_t)-1)));
 
+        /*
+         * Even though there can be a race/concurrent access of pcds by
+         * pcd_associate() and ktb_remotify_puts() i.e while ktb_remotify_puts()
+         * aquires the list lock tries to remotify pcd, but while doing the
+         * network operation unlocks the list and in this gap pcd_associate()
+         * aquires the list lock and moves it to local_only_list.  This is not a
+         * problem as the tmem_remotified_pcd_status_update() and
+         * pcd_associate() are protected by the pcd_tree_rwlocks[firstbyte] lock
+         * only one, ktb_remotify_puts() or pcd_associate(), will take effect on
+         * the pcd. Remember: tmem_remotified_pcd_status_update() is invoked
+         * from within ktb_remotify_puts() on finding a match at a remote server
+         * to take the pcd off pcd_remote_tree_roots[firstbyte]; out of
+         * remote_sharing_candidate_list and to put it in remote_shared_list 
+         */
 	//Accessing the pcd rb trees
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	root = &(tmem_system.pcd_tree_roots[firstbyte]);
@@ -819,6 +851,10 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 			 * that I have to do remote dedup also based on pcds. 
 			 * i.e. the summaries should hold pcds.
 			 */
+                        /*
+                         * NOTE: this can already be also in local_only_list
+                         * as it could have been subjected to a remote_associate
+                         */
                         //spin_lock(&(tmem_system.system_list_lock));
                         write_lock(&(tmem_system.system_list_rwlock));
 
@@ -947,7 +983,10 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	//ASSERT_WRITELOCK(&pcd_tree_rwlocks[firstbyte]);
 	//else
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-        pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
+
+        if(can_debug(pcd_disassociate))
+                pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n",
+                        firstbyte);
 
 	pgp->pcd = NULL;
 	pgp->firstbyte = NOT_SHAREABLE;
@@ -980,24 +1019,31 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 		 */
 
 		write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-                pr_info("pcd_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n", firstbyte);
+                if(can_debug(pcd_disassociate))
+                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n",
+                                firstbyte);
 		return;
 	}
 
 	write_lock(&(tmem_system.system_list_rwlock));
-        pr_info("system_list_lock LOCKED pcd_disassociate\n");
+
+        if(can_debug(pcd_disassociate))
+                pr_info("system_list_lock LOCKED pcd_disassociate\n");
 
 	if(can_show(pcd_disassociate))
 		pr_info(" *** mtp | Diassociating page with index: %u of object:"
 			" %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
 			" of client: %u, having firstbyte: %u from it's page"
-			" content descriptor (NO MORE REF TO THIS PAGE), pcd->status: "
-			" %d, pcd->currently: %d |  pcd_disassociate *** \n",
+			" content descriptor (NO MORE REF TO THIS PAGE), firstbyte: %u"
+                        "status: %d, remoteip: %s, remoteid: %llu, currently: %d |"
+                        "pcd_disassociate *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 			pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id, firstbyte,
-			pcd->status, pcd->currently);
+			pcd->firstbyte, pcd->status, 
+                        (pcd->remote_ip==NULL)?"NULL":pcd->remote_ip, pcd->remote_id,
+                        pcd->currently);
 	/*
 	 * no more references to this pcd, recycle it and the physical page.
 	 * also this pcd can be either in remote_sharing_candidate_list or
@@ -1007,7 +1053,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         /*
          * a bad bad hack which will let the pcd remain in the backend without
          * anyone actually accessing it. And causing a pcd in the remote server
-         * to be moved to remote_tree without anyone actually acessing it
+         * to be moved to remote_tree without this guy actually acessing it
          * remotely.
          */
         if(pcd->currently == REMOTIFYING)
@@ -1018,10 +1064,8 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         */
 
 	if(!list_empty(&pcd->system_rscl_pcds))
-        {
 		list_del_init(&pcd->system_rscl_pcds);
                 //list_replace
-        }
 	else if(!list_empty(&pcd->system_lol_pcds))
 		list_del_init(&pcd->system_lol_pcds);
 	else if(!list_empty(&pcd->system_rs_pcds))
@@ -1033,16 +1077,32 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 	pcd->pgp = NULL;
 
 	if(pcd->status == 2)
+        {
+                if(can_debug(pcd_disassociate))
+                        pr_info(" *** mtp | disassociating a remotified page |"
+                                " pcd_disassociate ***\n");
 		goto skiprbfree;
+        }
         else if(pcd->status == 1)
 	{
 		write_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-                pr_info("pcd_remote_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
+
+                if(can_debug(pcd_disassociate))
+                {
+                        pr_info("pcd_remote_tree_rwlocks[%u] LOCKED"
+                                " pcd_disassociate\n", firstbyte);
+                        pr_info(" *** mtp | disassociating a remote page |"
+                                " pcd_disassociate ***\n");
+                }
+
 		pcd = 
 		radix_tree_delete(&(tmem_system.pcd_remote_tree_roots[firstbyte])
 				  ,pcd->remote_id);
+
 		write_unlock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
-                pr_info("pcd_remote_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n", firstbyte);
+                if(can_debug(pcd_disassociate))
+                        pr_info("pcd_remote_tree_rwlocks[%u] UNLOCKED"
+                                " pcd_disassociate\n", firstbyte);
 	}
 
 	pcd->system_page = NULL;
@@ -1070,9 +1130,13 @@ skiprbfree:
 	 */
 fail_disasso:
 	write_unlock(&(tmem_system.system_list_rwlock));
-        pr_info("system_list_lock UNLOCKED pcd_disassociate\n");
+        if(can_debug(pcd_disassociate))
+                pr_info("system_list_lock UNLOCKED pcd_disassociate\n");
+
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-        pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n", firstbyte);
+        if(can_debug(pcd_disassociate))
+                pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n",
+                        firstbyte);
 }
 /******************************************************************************/
 /*					         END MAIN PCD & DEDUP ROUTINES*/
