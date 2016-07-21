@@ -1158,7 +1158,7 @@ restartthread:
                         list_for_each_entry(rs, &(rs_head), rs_list)
                         {
                                 if(bloom_filter_check(rs->rs_bflt, &firstbyte,\
-                                                        1, &bloom_res) < 0)
+                                                      1, &bloom_res) < 0)
                                 {
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info("*** mtp | checking for"
@@ -1199,7 +1199,7 @@ restartthread:
                                                                 " RS: %s, with"
                                                                 " ID: %llu |"
                                                                 " ktb_remotify_"
-                                                                " puts *** \n",
+                                                                "puts *** \n",
                                                                 rs->rs_ip,
                                                                 remote_id);
                                         /*
@@ -1208,9 +1208,15 @@ restartthread:
                                            &rdedup);
                                          */
                                                tmem_remotified_pcd_status_update
-                                                (pcd,nexpcd,firstbyte,remote_id,
-                                                 rs->rs_ip, &res);
+                                               (pcd,nexpcd,firstbyte,remote_id,
+                                                rs->rs_ip, &res);
                                                 pcd->currently = NORMAL;
+
+                                                if(can_debug(ktb_remotify_puts))
+                                                        pr_info("system_list_"
+                                                                "rwlock LOCKED "
+                                                                "ktb_remotify_"
+                                                                "puts \n");
                                                 break;
                                         }
                                 }
@@ -1229,18 +1235,18 @@ restartthread:
 
                         if((res == true) )
                         {
-                                if(can_debug(ktb_remotify_puts))
-                                        pr_info("system_list_rwlock LOCKED"
-                                                " ktb_remotify_puts \n");
                                 succ_count++;
                                 if(evict_status == 1)
                                         --sevict_count;
                                 else if(evict_status == 2)
                                         --devict_count;
                         }
+                        /*
+                        NOTE: this is now being done from within the
+                        tmem_remotified_pcd_status_update() function
+                        itself
                         else
                         {
-                                /*
                                  * hack_safe_nexpcd:3
                                  * to ensure that nexpcd points to a valid pcd I
                                  * need to leave it locked and update the nexpcd
@@ -1249,14 +1255,11 @@ restartthread:
                                 write_lock(&(tmem_system.system_list_rwlock));
                                 list_safe_reset_next(pcd, nexpcd,\
                                                 system_rscl_pcds);
-                                NOTE: this is now being done from within the
-                                tmem_remotified_pcd_status_update() function
-                                itself
-                                 */
                                 if(can_debug(ktb_remotify_puts))
                                         pr_info("system_list_rwlock LOCKED"
                                                 " ktb_remotify_puts \n");
                         }
+                        */
 
                         if(can_show(ktb_remotify_puts)) 
                         { 

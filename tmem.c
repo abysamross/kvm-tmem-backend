@@ -267,7 +267,7 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /*					   MAIN PCD, REMOTIFY & DEDUP ROUTINES*/
 /******************************************************************************/
 void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
-                                       struct tmem_page_content_descriptor *nexpcd,
+                                    struct tmem_page_content_descriptor *nexpcd,
 				       uint8_t firstbyte, uint64_t remote_id,
 				       char *rs_ip, bool *res)
 {
@@ -278,40 +278,52 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	write_lock(&(tmem_system.system_list_rwlock));
         /* 
-         * In case there was a race/concurrent access at ktb_remotify_puts()
-         * and pcd_remote_associate/pcd_associate I let the pcd remain in
-         * the remote_sharing_candidate_list itself.
-         * For a page that was remote_associated in pcd_remote_associate() while
-         * being tried to remotify in ktb_remotify_puts() I will just put it in
-         * it's rightful place in local_only_list.
-         * For a page that was locally deduplicated in pcd_associate() while
-         * being tried to remotify in ktb_remotify_puts() I will let the pcd be
-         * moved to    
-        if(pcd->status == 1)
+         * In case there was a race/concurrent access at ktb_remotify_puts() and
+         * pcd_remote_associate/pcd_associate I let the pcd remain in the
+         * remote_sharing_candidate_list itself.  For a page that was
+         * remote|local_associated in pcd_remote_associate() while being tried
+         * to remotify in ktb_remotify_puts() I will just put it in it's
+         * rightful place in local_only_list.
+                if(pcd->status == 1)
          */
-        if(pcd->currently == REMOTEASSOC || pcd->currently == LOCALASSOC)
+        if(pcd->currently == ASSOCIATING)
         {
-                failed_tmem_remotify_puts++;
 
                 /* 
-                 * if I ever get a pcd with status=1 in here that would be only
-                 * because it was remote associated, with a remote pcd, at the
-                 * same time while it was being explored for remotification
-                 * in ktb_remotify_puts() and if that is the case this pcd is
-                 * certain to be in remote_sharing_candidate list itself
-                 * i.e in here I shouldn't get a remote associated pcd that is
-                 * already in local_only_list
+                 * if I ever get a pcd with currently == REMOTEASSOC|LOCALASSOC
+                 * in here that would be only because it was remote| local
+                 * associated, with a remote pcd, at the same time while it was
+                 * being explored for remotification in ktb_remotify_puts() and
+                 * if that is the case this pcd is certain to be in
+                 * remote_sharing_candidate list itself i.e in here I shouldn't
+                 * get a remote associated pcd that is already in
+                 * local_only_list
                  */
-	        BUG_ON(list_empty(&pcd->system_rscl_pcds));
+                BUG_ON(list_empty(&pcd->system_rscl_pcds));
+
+                failed_tmem_remotify_puts++;
+                pcd->currently = NORMAL;
 
                 if(!list_empty(&pcd->system_rscl_pcds))
                 {
+                        /*
+                         * hack_safe_nexpcd:0 to ensure that nexpcd points to a
+                         * valid pcd. how will it point to invalid pcd?  bcoz I
+                         * am unlocking my list after getting a ref to pcd and
+                         * in between there can be many pcd_disassociate()s This
+                         * will update the nexpcd to point to the latest valid
+                         * next pcd in list
+                         */
                         list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
                         list_del_init(&pcd->system_rscl_pcds); 
                         list_add_tail(&pcd->system_lol_pcds,\
                                       &(tmem_system.local_only_list));
                 }
                 goto getout;
+        }
+        else if(pcd->currently == DISASSOCIATING)
+        {
+        
         }
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
@@ -558,9 +570,18 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
          * the pcd. Remember: tmem_remotified_pcd_status_update() is invoked
          * from within ktb_remotify_puts() on finding a match at a remote server
          * to take the pcd off pcd_remote_tree_roots[firstbyte]; out of
-         * remote_sharing_candidate_list and to put it in remote_shared_list 
+         * remote_sharing_candidate_list and to put it in remote_shared_list.
+         * But
+         * its an altogether different story if pcd_remote_associate() moves the
+         * pcd to lol, the pcd_disassociate() deletes many pcds including nexpcd
+         * thus screwing up my nexpcd pointer taken in ktb_remotify_puts().
+         * This is prevented by not moving a pcd to lol list while
+         * pcd->currently == REMOTIFYING and updating it to REMOTEASSOC.  And in
+         * tmem_remotified_pcd_status_update() if you find the pcd is currently
+         * REMOTEASSOC then, under the list lock, update nexpcd first and move
+         * it lol and prevent the remotification from happening
          */
-	//Accessing the pcd rb trees
+        //Accessing the pcd rb trees
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	root = &(tmem_system.pcd_tree_roots[firstbyte]);
 	new = &(root->rb_node);
@@ -703,7 +724,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                  */
                                 write_lock(&(tmem_system.system_list_rwlock));
 
-                                if(pcd->currently != REMOTIFYING)
+                                if(pcd->currently != NORMAL)
                                 {
                                         if(!list_empty(&pcd->system_rscl_pcds))
                                         {
@@ -714,8 +735,8 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                                 &(tmem_system.local_only_list));
                                         }
                                 }
-                                else if(pcd->currently == REMOTIFYING)
-                                        pcd->currently = REMOTEASSOC;
+                                else
+                                        pcd->currently = ASSOCIATING;
 
                                 write_unlock(&(tmem_system.system_list_rwlock));
 	                        succ_tmem_remote_dedups++;
@@ -800,6 +821,15 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
          * from within ktb_remotify_puts() on finding a match at a remote server
          * to take the pcd off pcd_remote_tree_roots[firstbyte]; out of
          * remote_sharing_candidate_list and to put it in remote_shared_list 
+         *
+         * But its an altogether different story if pcd_associate() moves the
+         * pcd to lol, the pcd_disassociate() deletes many pcds including nexpcd
+         * thus screwing up my nexpcd pointer taken in ktb_remotify_puts().
+         * This is prevented by not moving a pcd to lol list while
+         * pcd->currently == REMOTIFYING and updating it to LOCALASSOC. 
+         * And in tmem_remotified_pcd_status_update() if you find the pcd is
+         * currently LOCALASSOC then, under the list lock, update nexpcd first
+         * and move it lol and prevent the remotification from happening
          */
 	//Accessing the pcd rb trees
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
@@ -890,7 +920,7 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                         //spin_lock(&(tmem_system.system_list_lock));
                         write_lock(&(tmem_system.system_list_rwlock));
                         
-                        if(pcd->currently != REMOTIFYING)
+                        if(pcd->currently != NORMAL)
                         {
                                 if(!list_empty(&pcd->system_rscl_pcds))
                                 {
@@ -899,8 +929,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                                         &(tmem_system.local_only_list));
                                 }
                         } 
-                        else if(pcd->currently == REMOTIFYING)
-                                pcd->currently = LOCALASSOC;
+                        else
+                                pcd->currently = ASSOCIATING;
 
                         write_unlock(&(tmem_system.system_list_rwlock));
                         //spin_unlock(&(tmem_system.system_list_lock));
@@ -1092,7 +1122,8 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 			pgp->obj->pool->pool_id,
 			pgp->obj->pool->associated_client->client_id, firstbyte,
 			pcd->firstbyte, pcd->status, 
-                        (pcd->remote_ip==NULL)?"NULL":pcd->remote_ip, pcd->remote_id,
+                        (pcd->remote_ip==NULL)?"NULL":pcd->remote_ip,
+                        pcd->remote_id,
                         pcd->currently);
 	/*
 	 * no more references to this pcd, recycle it and the physical page.
@@ -1106,12 +1137,15 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
          * to be moved to remote_tree without this guy actually acessing it
          * remotely.
          */
-        if(pcd->currently == REMOTIFYING)
+        if(pcd->currently != NORMAL)
+        {
+                pcd->currently = DISASSOCIATING;
                 goto fail_disasso;
+        }
         /*
         else
                 pcd->currently = DISASSOCIATING;
-        */
+         */
 
 	if(!list_empty(&pcd->system_rscl_pcds))
 		list_del_init(&pcd->system_rscl_pcds);
