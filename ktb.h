@@ -63,7 +63,8 @@
 enum
 {
         NORMAL,
-        DISASSOCIATING,
+        REMOTEASSOC,
+        LOCALASSOC,
         REMOTIFYING,
 };
 /******************************************************************************/

@@ -678,7 +678,7 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         void *vaddr1, *vaddr2;
         struct tmem_page_content_descriptor *pcd;
         struct radix_tree_root *root = 
-                &(tmem_system.pcd_remote_tree_roots[firstbyte]);
+        &(tmem_system.pcd_remote_tree_roots[firstbyte]);
 
         vaddr1 = page_address(page);
         memset(vaddr1, 0, PAGE_SIZE);
@@ -1246,10 +1246,13 @@ restartthread:
                                  * need to leave it locked and update the nexpcd
                                  * as many pcd could have been removed from the
                                  * list by pcd_disassociate()
-                                 */
                                 write_lock(&(tmem_system.system_list_rwlock));
                                 list_safe_reset_next(pcd, nexpcd,\
                                                 system_rscl_pcds);
+                                NOTE: this is now being done from within the
+                                tmem_remotified_pcd_status_update() function
+                                itself
+                                 */
                                 if(can_debug(ktb_remotify_puts))
                                         pr_info("system_list_rwlock LOCKED"
                                                 " ktb_remotify_puts \n");

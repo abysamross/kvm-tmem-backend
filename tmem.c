@@ -276,16 +276,43 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	strcpy(ip, rs_ip);
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-
-        /* in case there was a race at ktb_remotify_puts and
-         * pcd_remote_associate/pcd_associate
+	write_lock(&(tmem_system.system_list_rwlock));
+        /* 
+         * In case there was a race/concurrent access at ktb_remotify_puts()
+         * and pcd_remote_associate/pcd_associate I let the pcd remain in
+         * the remote_sharing_candidate_list itself.
+         * For a page that was remote_associated in pcd_remote_associate() while
+         * being tried to remotify in ktb_remotify_puts() I will just put it in
+         * it's rightful place in local_only_list.
+         * For a page that was locally deduplicated in pcd_associate() while
+         * being tried to remotify in ktb_remotify_puts() I will let the pcd be
+         * moved to    
+        if(pcd->status == 1)
          */
-        if(pcd->status == 1 || !list_empty(&pcd->system_lol_pcds))
+        if(pcd->currently == REMOTEASSOC || pcd->currently == LOCALASSOC)
         {
                 failed_tmem_remotify_puts++;
+
+                /* 
+                 * if I ever get a pcd with status=1 in here that would be only
+                 * because it was remote associated, with a remote pcd, at the
+                 * same time while it was being explored for remotification
+                 * in ktb_remotify_puts() and if that is the case this pcd is
+                 * certain to be in remote_sharing_candidate list itself
+                 * i.e in here I shouldn't get a remote associated pcd that is
+                 * already in local_only_list
+                 */
+	        BUG_ON(list_empty(&pcd->system_rscl_pcds));
+
+                if(!list_empty(&pcd->system_rscl_pcds))
+                {
+                        list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
+                        list_del_init(&pcd->system_rscl_pcds); 
+                        list_add_tail(&pcd->system_lol_pcds,\
+                                      &(tmem_system.local_only_list));
+                }
                 goto getout;
         }
-
 	/* 
 	 * just ensuring that this is not an aleady remotified pcd.
 	 * this should never happen.
@@ -306,7 +333,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	 * add this to the remote shared list;
 	 * from now this page is available only in system_rs_pcds list
 	 */
-	write_lock(&(tmem_system.system_list_rwlock));
+	//write_lock(&(tmem_system.system_list_rwlock));
         /*
          * this if is not needed
          */
@@ -624,15 +651,16 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 					pcd->pgp->obj->oid.oid[0],
 					tmem_oid_hash(&(pcd->pgp->obj->oid)),
 					pcd->pgp->obj->pool->pool_id,
-					pcd->pgp->obj->pool->associated_client->client_id,
-					firstbyte, pcd->pgp->firstbyte, pcd->firstbyte);
+				pcd->pgp->obj->pool->associated_client->client_id,
+				firstbyte, pcd->pgp->firstbyte, pcd->firstbyte);
 			/* 
 			 * this pcd is alreay associated to a remote page.
 			 */
 			if(pcd->status == 1)
 			{
 				*id = pcd->remote_id;
-				goto match;
+	                        succ_tmem_remote_dedups++;
+				goto getout;
 			}
 			//write_lock(&id_rwlock);
 			/* else, give new remote id */
@@ -650,9 +678,10 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 			if(ret != 0)
 			{
 				ret = -1;
+			        pcd->status = 0;
 				pcd->remote_id = 0;
 				*id = 0;
-				goto getout;
+				goto remoteassocfail;
 			}
 			else
 			{
@@ -661,8 +690,37 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 				 * this tree for next remote association. 
 				 */
 				++tmem_system.remote_tree_ids[firstbyte];
-				goto match;
-			}
+				//goto match;
+                                /* 
+                                 * If the matched pcd is a unique pcd then move
+                                 * it to lol list.  lol list. Hence even a
+                                 * remote association will result in a pcd being
+                                 * put to local_only_list because you don't want
+                                 * this pcd to remotified anymore...obviously as
+                                 * you are already allowing a remote machine to
+                                 * share it. You wouldn't want to upset that guy
+                                 * would you? 
+                                 */
+                                write_lock(&(tmem_system.system_list_rwlock));
+
+                                if(pcd->currently != REMOTIFYING)
+                                {
+                                        if(!list_empty(&pcd->system_rscl_pcds))
+                                        {
+                                                list_del_init(
+                                                &pcd->system_rscl_pcds);
+                                                list_add_tail(
+                                                &pcd->system_lol_pcds,\
+                                                &(tmem_system.local_only_list));
+                                        }
+                                }
+                                else if(pcd->currently == REMOTIFYING)
+                                        pcd->currently = REMOTEASSOC;
+
+                                write_unlock(&(tmem_system.system_list_rwlock));
+	                        succ_tmem_remote_dedups++;
+                                goto getout;
+                        }
 			/* 
 			 * NOTE: we are not incrementing the pcd->refcount for a
 			 * remote association, because we do not want a remote
@@ -671,6 +729,9 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 			 */
 		}
 	}
+
+remoteassocfail:
+
 	ret = -1;
 	//tmem_free_page();
 	//__free_page(remote_page);
@@ -682,7 +743,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 			"page having firstbyte: %u | pcd_remote_associate "
 			"*** \n", firstbyte);
 
-        goto getout;
+        //goto getout;
 	/*
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);
@@ -690,25 +751,9 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 	//pgp->eviction_attempted = 0;
 	pgp->pcd = pcd;
 	*/
-match:
-	/* 
-         * If the matched pcd is a unique pcd then move it to lol list.  lol
-         * list. Hence even a remote association will result in a pcd being put
-         * to local_only_list because you don't want this pcd to remotified
-         * anymore...obviously as you are already allowing a remote machine to
-         * share it. You wouldn't want to upset that guy would you?
-	 */
-        write_lock(&(tmem_system.system_list_rwlock));
-	if(!list_empty(&pcd->system_rscl_pcds))
-	{
-		list_del_init(&pcd->system_rscl_pcds); 
-		list_add_tail(&pcd->system_lol_pcds,\
-			      &(tmem_system.local_only_list));
-	}
-	write_unlock(&(tmem_system.system_list_rwlock));
+//match:
 
 	//succ_tmem_dedups++;
-	succ_tmem_remote_dedups++;
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	//__free_page(remote_page);
@@ -827,23 +872,10 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                         }
                         */
 
-			if(can_show(pcd_associate))
-				pr_info(" *** mtp | Got a match to de-duplicate"
-					" page with index: %u of object: %llu "
-					"%llu %llu rooted at rb_tree slot: %u "
-					"of pool: %u of client: %u, having "
-					"firstbyte: %u | pcd_associate *** \n",
-					pgp->index, pgp->obj->oid.oid[2],
-				pgp->obj->oid.oid[1],pgp->obj->oid.oid[0],
-					tmem_oid_hash(&(pgp->obj->oid)),
-					pgp->obj->pool->pool_id,
-				pgp->obj->pool->associated_client->client_id,
-					firstbyte);
 
 			//match! free the no-longer-needed page
 			//tmem_free_page(pgp->obj->pool, pgp->tmem_page);
 			//deduped_puts++;
-			succ_tmem_dedups++;
 
 			/* 
 			 * If the matched pcd is from rscl then move it to lol.
@@ -857,16 +889,34 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                          */
                         //spin_lock(&(tmem_system.system_list_lock));
                         write_lock(&(tmem_system.system_list_rwlock));
-
-                        if(!list_empty(&pcd->system_rscl_pcds))
+                        
+                        if(pcd->currently != REMOTIFYING)
                         {
-                                list_del_init(&pcd->system_rscl_pcds); 
-                                list_add_tail(&pcd->system_lol_pcds,\
-                                              &(tmem_system.local_only_list));
-                        }
+                                if(!list_empty(&pcd->system_rscl_pcds))
+                                {
+                                        list_del_init(&pcd->system_rscl_pcds); 
+                                        list_add_tail(&pcd->system_lol_pcds,\
+                                        &(tmem_system.local_only_list));
+                                }
+                        } 
+                        else if(pcd->currently == REMOTIFYING)
+                                pcd->currently = LOCALASSOC;
 
                         write_unlock(&(tmem_system.system_list_rwlock));
                         //spin_unlock(&(tmem_system.system_list_lock));
+			if(can_show(pcd_associate))
+				pr_info(" *** mtp | Got a match to de-duplicate"
+					" page with index: %u of object: %llu "
+					"%llu %llu rooted at rb_tree slot: %u "
+					"of pool: %u of client: %u, having "
+					"firstbyte: %u | pcd_associate *** \n",
+					pgp->index, pgp->obj->oid.oid[2],
+				pgp->obj->oid.oid[1],pgp->obj->oid.oid[0],
+					tmem_oid_hash(&(pgp->obj->oid)),
+					pgp->obj->pool->pool_id,
+				pgp->obj->pool->associated_client->client_id,
+					firstbyte);
+			succ_tmem_dedups++;
 
                         tmem_free_page(pgp->tmem_page);
 			goto match;
@@ -1135,7 +1185,7 @@ fail_disasso:
 
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
         if(can_debug(pcd_disassociate))
-                pr_info("pcd_tree_rwlocks[%u] LOCKED pcd_disassociate\n",
+                pr_info("pcd_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n",
                         firstbyte);
 }
 /******************************************************************************/
