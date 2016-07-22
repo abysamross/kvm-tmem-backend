@@ -331,6 +331,22 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         " @@@@\n", nexpcd->firstbyte, nexpcd->status,
                         nexpcd->currently, nexpcd->remote_ip, nexpcd->remote_id, 
                         (nexpcd->system_page==NULL)?"NULL":"NOT NULL"); 
+
+                if(nexpcd->pgp != NULL)
+                {
+
+		pr_info(" *** mtp | pcd pgp page with index: "
+			"%u of object: %llu %llu %llu rooted at rb_tree slot: "
+			"%u of pool: %u of client: %u, having firstbyte: %u | "
+			"tmem_pcd_status_update *** \n",
+			nexpcd->pgp->index, nexpcd->pgp->obj->oid.oid[2], 
+                        nexpcd->pgp->obj->oid.oid[1],
+			nexpcd->pgp->obj->oid.oid[0], 
+                        tmem_oid_hash(&(nexpcd->pgp->obj->oid)),
+			nexpcd->pgp->obj->pool->pool_id,
+			nexpcd->pgp->obj->pool->associated_client->client_id,
+                        firstbyte);
+                }
         }
         /* now you may remove him from rscl */
         /* 
