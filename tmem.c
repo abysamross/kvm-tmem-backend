@@ -321,6 +321,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         (nexpcd->system_page==NULL)?"NULL":"NOT NULL"); 
         }
         list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
+
         if(can_debug(tmem_pcd_status_update))
         {
                 pr_info("@@@@ after updating nexpcd @@@@ \n");
@@ -332,9 +333,6 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         (nexpcd->system_page==NULL)?"NULL":"NOT NULL"); 
         }
         /* now you may remove him from rscl */
-        if(can_debug(tmem_pcd_status_update))
-                pr_info("@@@@ removing from rscl @@@@\n");
-        list_del_init(&pcd->system_rscl_pcds); 
         /* 
          * In case there was a race/concurrent access at ktb_remotify_puts()
          * and pcd_remote_associate/pcd_associate I let the pcd remain in the
@@ -361,6 +359,10 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 //if(!list_empty(&pcd->system_rscl_pcds))
                 //{
                 if(can_debug(tmem_pcd_status_update))
+                        pr_info("@@@@ removing from rscl @@@@\n");
+                list_del_init(&pcd->system_rscl_pcds); 
+
+                if(can_debug(tmem_pcd_status_update))
                         pr_info("@@@@ moving to lol @@@@\n");
 
                 list_add_tail(&pcd->system_lol_pcds,\
@@ -381,6 +383,10 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 ((remote_match == 0) && pcd->currently == DISASSOCIATING)
         )
         {
+                if(can_debug(tmem_pcd_status_update))
+                        pr_info("@@@@ removing from rscl @@@@\n");
+                list_del_init(&pcd->system_rscl_pcds); 
+
                 if(can_debug(tmem_pcd_status_update))
                         pr_info("@@@@ removing from pcd_tree_roots @@@@\n");
 
@@ -734,7 +740,17 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 		else
 		{
                         if(pcd->currently == DISASSOCIATING)
+                        {
+                                pr_info("matched pcd is DISASSOCIATING "
+                                        "pcd_remote_associate\n");
+                                pr_info(" pcd->currently: %d, pcd->status: %d,"
+                                        " pcd->firstbyte: %u"
+                                        "pcd_remote_associate ***\n", 
+                                        pcd->currently, pcd->status,
+                                        pcd->firstbyte);
+
                                 goto remoteassocfail; 
+                        }
 
 			BUG_ON(pcd->status == 2);
 			BUG_ON(pcd->remote_ip != NULL);
@@ -846,6 +862,12 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                                 " pcd->currently ="
                                                 " ASSOCIATING|"
                                                 " pcd_remote_associate ***\n");
+                                        pr_info(" pcd->currently: %d,"
+                                                " pcd->status: %d,"
+                                                " pcd->firstbyte: %u"
+                                                "pcd_remote_associate ***\n", 
+                                                pcd->currently, pcd->status,
+                                                pcd->firstbyte);
                                         pcd->currently = ASSOCIATING;
                                 }
 
@@ -992,7 +1014,16 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 		else
 		{
                         if(pcd->currently == DISASSOCIATING)
+                        {
+                                pr_info("matched pcd is DISASSOCIATING "
+                                        "pcd_associate\n");
+                                pr_info(" pcd->currently: %d, pcd->status: %d,"
+                                        " pcd->firstbyte: %u"
+                                        "pcd_associate ***\n", pcd->currently,
+                                        pcd->status, pcd->firstbyte);
+
                                 goto assocfailed;
+                        }
 
                         BUG_ON(pcd->status == 2);
 
@@ -1049,6 +1080,12 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                         {
                                 pr_info(" *** mtp | making pcd->currently ="
                                         " ASSOCIATING| pcd_associate ***\n");
+
+                                pr_info(" pcd->currently: %d, pcd->status: %d,"
+                                        " pcd->firstbyte: %u"
+                                        "pcd_associate ***\n", pcd->currently,
+                                        pcd->status, pcd->firstbyte);
+
                                 pcd->currently = ASSOCIATING;
                         }
 
@@ -1262,8 +1299,14 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         if(pcd->currently != NORMAL)
         {
                 if(can_debug(pcd_disassociate))
+                {
                         pr_info(" *** mtp | making pcd->currently ="
                                 " DISASSOCIATING| pcd_disassociate ***\n");
+                        pr_info(" pcd->currently: %d, pcd->status: %d,"
+                                " pcd->firstbyte: %u"
+                                "pcd_disassociate ***\n", pcd->currently,
+                                pcd->status, pcd->firstbyte);
+                }
                 pcd->currently = DISASSOCIATING;
                 goto disassofail;
         }
