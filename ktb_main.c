@@ -1209,7 +1209,7 @@ restartthread:
                                                                 remote_id);
 
                                                tmem_pcd_status_update
-                                               (pcd,nexpcd,firstbyte,remote_id,
+                                               (pcd,&nexpcd,firstbyte,remote_id,
                                                 rs->rs_ip, 1, &res);
                                                /* 
                                                 * do not touch the ptr pcd until
@@ -1237,7 +1237,7 @@ restartthread:
                                                         ,rs->rs_ip);
                                 }
 
-                                tmem_pcd_status_update(pcd, nexpcd, firstbyte,
+                                tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
                                                        remote_id, rs->rs_ip, 0,
                                                        &res);
 

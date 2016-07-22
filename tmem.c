@@ -267,11 +267,12 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /*					   MAIN PCD, REMOTIFY & DEDUP ROUTINES*/
 /******************************************************************************/
 void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
-                            struct tmem_page_content_descriptor *nexpcd,
+                            struct tmem_page_content_descriptor **xnexpcd,
 			    uint8_t firstbyte, uint64_t remote_id,
 			    char *rs_ip, int remote_match, bool *res)
 {
 	char *ip = NULL;
+        struct tmem_page_content_descriptor *nexpcd = *xnexpcd;
 	ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
 	strcpy(ip, rs_ip);
 
@@ -296,7 +297,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
         if(can_debug(tmem_pcd_status_update))
                 pr_info("@@@@@@ currently: %d, status: %d, firstbyte: %u,"
-                        " remote_id: %lld, remote_ip: %s, remote_match:"
+                        " remote_id: %llu, remote_ip: %s, remote_match:"
                         " %d, res: %s @@@@@@\n",
                         pcd->currently, pcd->status, firstbyte,
                         remote_id, rs_ip, remote_match,
@@ -520,7 +521,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
          */
 getout:
 
-        pr_info("@@@@@@ firstbyte: %u, remote_id: %lld, remote_ip: %s,"
+        pr_info("@@@@@@ firstbyte: %u, remote_id: %llu, remote_ip: %s,"
                 " remote_match: %d, res: %s @@@@@@\n",
                 firstbyte, remote_id, rs_ip, remote_match,
                 (*res==true)?"true":"false");
