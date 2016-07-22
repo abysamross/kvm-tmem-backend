@@ -338,10 +338,9 @@ snd_page_wait:
 
         jleft =
         wait_event_timeout(page_wait,\
-			   !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-			   10*HZ);   
+	(skb_queue_empty(&conn_socket->sk->sk_receive_queue) == 0), 5*HZ);   
 
-	if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
+	if(skb_queue_empty(&conn_socket->sk->sk_receive_queue) == 0)              
 	{
 		if(can_show(tcp_client_snd_page))
 			pr_info(" *** mtp | client receiving message, jleft:"
