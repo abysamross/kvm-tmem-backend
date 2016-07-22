@@ -1210,8 +1210,15 @@ restartthread:
                                                tmem_remotified_pcd_status_update
                                                (pcd,nexpcd,firstbyte,remote_id,
                                                 rs->rs_ip, &res);
-                                                pcd->currently = NORMAL;
 
+                                               /* 
+                                                * do not touch the ptr pcd until
+                                                * the beginning of next
+                                                * iteration, as
+                                                * tmem_remotified_pcd_status_
+                                                * update could have
+                                                * disassociated this pcd.
+                                                */
                                                 if(can_debug(ktb_remotify_puts))
                                                         pr_info("system_list_"
                                                                 "rwlock LOCKED "

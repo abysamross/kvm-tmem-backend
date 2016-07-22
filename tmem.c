@@ -277,20 +277,40 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
 	write_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
 	write_lock(&(tmem_system.system_list_rwlock));
+        /* it's a grave sin to get a pcd not belonging to the rscl here!! */
+        BUG_ON(list_empty(&pcd->system_rscl_pcds));
+	BUG_ON(pcd->system_page == NULL);
+	/* 
+	 * just ensuring that this is not an aleady remotified pcd.
+	 * this should never happen.
+	 */
+	BUG_ON(pcd->remote_ip != NULL);
+	BUG_ON(pcd->status == 2);
+        /*
+         * hack_safe_nexpcd:0 to ensure that nexpcd points to a
+         * valid pcd. how will it point to invalid pcd?  bcoz I
+         * am unlocking my list after getting a ref to pcd and
+         * in between there can be many pcd_disassociate()s This
+         * will update the nexpcd to point to the latest valid
+         * next pcd in list
+         */
+        /* safely reset the nexpcd pointer*/
+        list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
+        /* now you may remove him from rscl */
+        list_del_init(&pcd->system_rscl_pcds); 
         /* 
-         * In case there was a race/concurrent access at ktb_remotify_puts() and
-         * pcd_remote_associate/pcd_associate I let the pcd remain in the
+         * In case there was a race/concurrent access at ktb_remotify_puts()
+         * and pcd_remote_associate/pcd_associate I let the pcd remain in the
          * remote_sharing_candidate_list itself.  For a page that was
-         * remote|local_associated in pcd_remote_associate() while being tried
-         * to remotify in ktb_remotify_puts() I will just put it in it's
+         * remote|local_associated in pcd[_remotei]_associate() while being
+         * tried to remotify in ktb_remotify_puts() I will just put it in it's
          * rightful place in local_only_list.
                 if(pcd->status == 1)
          */
         if(pcd->currently == ASSOCIATING)
         {
-
                 /* 
-                 * if I ever get a pcd with currently == REMOTEASSOC|LOCALASSOC
+                 * if I ever get a pcd with currently == ASSOCIATING 
                  * in here that would be only because it was remote| local
                  * associated, with a remote pcd, at the same time while it was
                  * being explored for remotification in ktb_remotify_puts() and
@@ -299,58 +319,84 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * get a remote associated pcd that is already in
                  * local_only_list
                  */
-                BUG_ON(list_empty(&pcd->system_rscl_pcds));
-
                 failed_tmem_remotify_puts++;
-                pcd->currently = NORMAL;
 
-                if(!list_empty(&pcd->system_rscl_pcds))
-                {
-                        /*
-                         * hack_safe_nexpcd:0 to ensure that nexpcd points to a
-                         * valid pcd. how will it point to invalid pcd?  bcoz I
-                         * am unlocking my list after getting a ref to pcd and
-                         * in between there can be many pcd_disassociate()s This
-                         * will update the nexpcd to point to the latest valid
-                         * next pcd in list
-                         */
-                        list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
-                        list_del_init(&pcd->system_rscl_pcds); 
-                        list_add_tail(&pcd->system_lol_pcds,\
-                                      &(tmem_system.local_only_list));
-                }
+                //if(!list_empty(&pcd->system_rscl_pcds))
+                //{
+                list_add_tail(&pcd->system_lol_pcds,\
+                              &(tmem_system.local_only_list));
+                //}
+
+                pcd->currently = NORMAL;
                 goto getout;
         }
-        else if(pcd->currently == DISASSOCIATING)
+
+	/* delete this pcd from the rbtree pcd_tree_roots[firstbyte] */
+	rb_erase(&pcd->pcd_rb_tree_node,\
+		 &(tmem_system.pcd_tree_roots[firstbyte]));
+	/* reinit the struct for safety for now */
+	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
+        /* 
+         * free the pcd->system_page. it is not required as either it is marked
+         * for disassociation or it was successfully remotified.
+         */
+        __free_page(pcd->system_page);
+        pcd->system_page = NULL;
+
+        /* decrement the count of unique pages */
+        system_unique_pages--;
+
+        if(pcd->currently == DISASSOCIATING)
         {
-        
+                /*
+                 * this pcd was choosen to be disassociated when it was explored
+                 * for remotification. it should be deleted now.
+                 */
+                failed_tmem_remotify_puts++;
+
+                if(pcd->status == 1)
+                {
+                        write_lock(
+                        &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+
+                        if(can_debug(tmem_remotified_pcd_status_update))
+                        {
+                                pr_info("pcd_remote_tree_rwlocks[%u] LOCKED"
+                                        " tmem_remotified_pcd_status_update\n",
+                                        firstbyte);
+                                pr_info(" *** mtp | disassociating a remote"
+                                        " page | tmem_remotified_pcd_status_"
+                                        " update***\n");
+                        }
+
+                        pcd = 
+                        radix_tree_delete(
+                        &(tmem_system.pcd_remote_tree_roots[firstbyte])
+                        ,pcd->remote_id);
+
+                        write_unlock(
+                        &(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
+
+                        if(can_debug(pcd_disassociate))
+                                pr_info("pcd_remote_tree_rwlocks[%u] UNLOCKED"
+                                        " tmem_remotified_pcd_status_update\n",
+                                        firstbyte);
+                }
+                //now free up the pcd memory
+                kmem_cache_free(tmem_page_content_desc_cachep, pcd);
+                pcd = NULL;
+                goto getout;
         }
-	/* 
-	 * just ensuring that this is not an aleady remotified pcd.
-	 * this should never happen.
-	 */
-	BUG_ON(pcd->remote_ip != NULL);
-	BUG_ON(pcd->system_page == NULL);
-	/* enusring status == 0*/
-	//BUG_ON(pcd->status == 1);
-	BUG_ON(pcd->status == 2);
 
 	pcd->status = 2;
 	pcd->remote_ip = ip;
 	pcd->remote_id = remote_id;
-
-	/* should be an rscl pcd and nothing else*/
-	BUG_ON(list_empty(&pcd->system_rscl_pcds));
 	/* 
 	 * add this to the remote shared list;
 	 * from now this page is available only in system_rs_pcds list
 	 */
-	//write_lock(&(tmem_system.system_list_rwlock));
-        /*
-         * this if is not needed
-         */
-	if(!list_empty(&pcd->system_rscl_pcds))
-	{
+	//if(!list_empty(&pcd->system_rscl_pcds))
+	//{
                 /*
                  * hack_safe_nexpcd:1
                  * to ensure that nexpcd points to a valid pcd.
@@ -360,19 +406,10 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * This will update the nexpcd to point to the latest valid next
                  * pcd in list
                  */
-                list_safe_reset_next(pcd, nexpcd, system_rscl_pcds);
-		list_del_init(&pcd->system_rscl_pcds); 
-		list_add_tail(&pcd->system_rs_pcds,\
-			      &(tmem_system.remote_shared_list));
-	}
-	//__free_page(pcd->system_page);
-	/* delete this pcd from the rbtree pcd_tree_roots[firstbyte]*/
-	rb_erase(&pcd->pcd_rb_tree_node,\
-		 &(tmem_system.pcd_tree_roots[firstbyte]));
-	//reinit the struct for safety for now
-	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
-        //*rdedup = true;
-        __free_page(pcd->system_page);
+        list_add_tail(&pcd->system_rs_pcds,\
+                      &(tmem_system.remote_shared_list));
+	//}
+        pcd->currently = NORMAL;
 
         if(can_debug(tmem_remotified_pcd_status_update))
         {
@@ -380,11 +417,8 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         pr_info(" OMG: pcd->system_page != NULL even after"
                                 "__free_page \n");
         }
-        pcd->system_page = NULL;
         succ_tmem_remotify_puts++;
-        system_unique_pages--;
 	*res = true;
-
         /*
          * hack_safe_nexpcd:2
          * to ensure that nexpcd points to a valid pcd I need to leave it locked
@@ -393,13 +427,6 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
          */
 getout:
 	write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-	/* 
-         * free the pcd->system_page as it is now remotified.
-         * better not to free pcd->system_page here as you are within a mutex.
-         * why?
-         */
-        //if(pcd->system_page != NULL)
-        //__free_page(pcd->system_page);
 }
 
 int tmem_remotified_copy_to_client(struct page *client_page,\
@@ -635,6 +662,9 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 		*/
 		else
 		{
+                        if(pcd->currently == DISASSOCIATING)
+                                goto remoteassocfail; 
+
 			BUG_ON(pcd->status == 2);
 			BUG_ON(pcd->remote_ip != NULL);
 			/*
@@ -724,6 +754,10 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                  */
                                 write_lock(&(tmem_system.system_list_rwlock));
 
+                                /*
+                                if(pcd->currently == ASSOCIATING) || 
+                                (pcd->currently == REMOTIFYING)
+                                */
                                 if(pcd->currently != NORMAL)
                                 {
                                         if(!list_empty(&pcd->system_rscl_pcds))
@@ -853,7 +887,6 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 		pcd = container_of(*new, struct tmem_page_content_descriptor,\
 				   pcd_rb_tree_node);
 		parent = *new;
-
 		//compare new entry and rb_tree entry, set cmp accordingly
 		ASSERT(pgp->tmem_page != NULL);
 		ASSERT(pcd->system_page != NULL);
@@ -881,6 +914,9 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 		*/
 		else
 		{
+                        if(pcd->currently == DISASSOCIATING)
+                                goto assocfailed;
+
                         BUG_ON(pcd->status == 2);
 
                         /*if the page has been been moved to a remote machine*/
@@ -919,7 +955,10 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                          */
                         //spin_lock(&(tmem_system.system_list_lock));
                         write_lock(&(tmem_system.system_list_rwlock));
-                        
+                        /*
+                        if(pcd->currently == ASSOCIATING) || 
+                        (pcd->currently == REMOTIFYING)
+                        */
                         if(pcd->currently != NORMAL)
                         {
                                 if(!list_empty(&pcd->system_rscl_pcds))
@@ -952,6 +991,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 			goto match;
 		}
 	}
+
+assocfailed:
 
 	ret = 1;
 	failed_tmem_dedups++;
@@ -1082,8 +1123,8 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 			pr_info(" *** mtp | Diassociating page with index: %u "
 				"of object: %llu %llu %llu rooted at rb_tree "
 				"slot: %u of pool: %u of client: %u, having "
-				"firstbyte: %u from it's page content descriptor"
-				" | pcd_disassociate *** \n",
+				"firstbyte: %u from it's page content descripto"
+				"r | pcd_disassociate *** \n",
 				pgp->index, pgp->obj->oid.oid[2],
 				pgp->obj->oid.oid[1], pgp->obj->oid.oid[0],
 				tmem_oid_hash(&(pgp->obj->oid)),
@@ -1100,7 +1141,8 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
 
 		write_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                 if(can_debug(pcd_disassociate))
-                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED pcd_disassociate\n",
+                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED"
+                                " pcd_disassociate\n",
                                 firstbyte);
 		return;
 	}
@@ -1111,12 +1153,12 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
                 pr_info("system_list_lock LOCKED pcd_disassociate\n");
 
 	if(can_show(pcd_disassociate))
-		pr_info(" *** mtp | Diassociating page with index: %u of object:"
-			" %llu %llu %llu rooted at rb_tree slot: %u of pool: %u"
-			" of client: %u, having firstbyte: %u from it's page"
-			" content descriptor (NO MORE REF TO THIS PAGE), firstbyte: %u"
-                        "status: %d, remoteip: %s, remoteid: %llu, currently: %d |"
-                        "pcd_disassociate *** \n",
+		pr_info(" *** mtp | Diassociating page with index: %u of object"
+			": %llu %llu %llu rooted at rb_tree slot: %u of pool:"
+                        " %u of client: %u, having firstbyte: %u from it's page"
+			" content descriptor (NO MORE REF TO THIS PAGE),"
+                        " firstbyte: %u status: %d, remoteip: %s, remoteid:"
+                        " %llu, currently: %d | pcd_disassociate *** \n",
 			pgp->index, pgp->obj->oid.oid[2], pgp->obj->oid.oid[1],
 			pgp->obj->oid.oid[0], tmem_oid_hash(&(pgp->obj->oid)),
 			pgp->obj->pool->pool_id,
@@ -1140,7 +1182,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
         if(pcd->currently != NORMAL)
         {
                 pcd->currently = DISASSOCIATING;
-                goto fail_disasso;
+                goto disassofail;
         }
         /*
         else
@@ -1212,7 +1254,8 @@ skiprbfree:
 	 * ktb_destroy_client() (which will eventually call pcd_disassociate)
 	 * while accessing the pcds in the system_rscl_pcds list.
 	 */
-fail_disasso:
+disassofail:
+
 	write_unlock(&(tmem_system.system_list_rwlock));
         if(can_debug(pcd_disassociate))
                 pr_info("system_list_lock UNLOCKED pcd_disassociate\n");

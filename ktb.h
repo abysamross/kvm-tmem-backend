@@ -63,9 +63,9 @@
 enum
 {
         NORMAL,
-        REMOTEASSOC,
-        LOCALASSOC,
+        ASSOCIATING,
         REMOTIFYING,
+        DISASSOCIATING,
 };
 /******************************************************************************/
 /*				   Declaration of ktb data structures and api */ 
