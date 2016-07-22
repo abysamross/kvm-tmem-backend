@@ -57,57 +57,6 @@ struct tmem_page_content_descriptor *test_pcd;
 
 struct tmem_system_view tmem_system;
 
-static ssize_t devict_read(struct kobject *kobj, struct kobj_attribute *attr,
-                           char *buf)
-{
-        return sprintf(buf, "%lld\n", devict_count);
-
-}
-
-static ssize_t devict_write(struct kobject *kobj, struct kobj_attribute *attr,
-                            const char *buf, size_t count)
-{
-        int ret;
-        ret = kstrtoll(buf, 10, &devict_count);
-        if(ret < 0)
-                return ret;
-
-        return count;
-}
-
-static ssize_t dynamic_eviction_read(struct kobject *kobj, struct kobj_attribute
-                                     *attr, char *buf)
-{
-        return sprintf(buf, "%d\n", dynamic_eviction);
-
-}
-
-static ssize_t dynamic_eviction_write(struct kobject *kobj, struct kobj_attribute
-                                      *attr, const char *buf, size_t count)
-{
-        int ret;
-        ret = kstrtoint(buf, 10, &dynamic_eviction);
-        if(ret < 0)
-                return ret;
-
-        return count;
-}
-
-static struct kobj_attribute devict_count_attribute = 
-__ATTR(devict_count, 0664, devict_read, devict_write);
-
-static struct kobj_attribute dynamic_eviction_attribute = 
-__ATTR(dynamic_eviction, 0664, dynamic_eviction_read, dynamic_eviction_write);
-
-static struct attribute *devict_attrs[] = {
-        &devict_count_attribute.attr,
-        &dynamic_eviction_attribute.attr,
-        NULL,
-};
-
-static struct attribute_group devict_attr_group = {
-        .attrs  = devict_attrs,
-};
 /*
 struct rb_root pcd_tree_roots[256]; 
 rwlock_t pcd_tree_rwlocks[256]; 
@@ -148,7 +97,7 @@ int debug_bloom_filter_check = 0;
 int debug_timed_fwd_filter = 0;
 int debug_ktb_remotify_puts = 0;
 int debug_pcd_add_to_remote_tree = 0;
-int debug_tmem_remotified_pcd_status_update = 0;
+int debug_tmem_pcd_status_update = 0;
 int debug_ktb_remote_get = 0;
 
 int show_msg_ktb_new_pool = 0;
@@ -175,7 +124,7 @@ int show_msg_bloom_filter_check = 0;
 int show_msg_timed_fwd_filter = 0;
 int show_msg_ktb_remotify_puts = 0;
 int show_msg_pcd_add_to_remote_tree = 0;
-int show_msg_tmem_remotified_pcd_status_update = 0;
+int show_msg_tmem_pcd_status_update = 0;
 int show_msg_ktb_remote_get = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
@@ -229,6 +178,57 @@ u64 failed_tmem_page_invalidates;
 /*                                                     End Debugfs files/vars */
 /******************************************************************************/ 
 
+static ssize_t devict_read(struct kobject *kobj, struct kobj_attribute *attr,
+                           char *buf)
+{
+        return sprintf(buf, "%lld\n", devict_count);
+
+}
+
+static ssize_t devict_write(struct kobject *kobj, struct kobj_attribute *attr,
+                            const char *buf, size_t count)
+{
+        int ret;
+        ret = kstrtoll(buf, 10, &devict_count);
+        if(ret < 0)
+                return ret;
+
+        return count;
+}
+
+static ssize_t dynamic_eviction_read(struct kobject *kobj, struct kobj_attribute
+                                     *attr, char *buf)
+{
+        return sprintf(buf, "%d\n", dynamic_eviction);
+
+}
+
+static ssize_t dynamic_eviction_write(struct kobject *kobj, struct kobj_attribute
+                                      *attr, const char *buf, size_t count)
+{
+        int ret;
+        ret = kstrtoint(buf, 10, &dynamic_eviction);
+        if(ret < 0)
+                return ret;
+
+        return count;
+}
+
+static struct kobj_attribute devict_count_attribute = 
+__ATTR(devict_count, 0664, devict_read, devict_write);
+
+static struct kobj_attribute dynamic_eviction_attribute = 
+__ATTR(dynamic_eviction, 0664, dynamic_eviction_read, dynamic_eviction_write);
+
+static struct attribute *devict_attrs[] = {
+        &devict_count_attribute.attr,
+        &dynamic_eviction_attribute.attr,
+        NULL,
+};
+
+static struct attribute_group devict_attr_group = {
+        .attrs  = devict_attrs,
+};
 /******************************************************************************/
 /*			                          bloom filter transfer thread*/
 /******************************************************************************/
@@ -1185,7 +1185,7 @@ restartthread:
                                                                 " was NOT FOUND"
                                                                 " at RS:%s bflt"
                                                                 " | ktb_remotif"
-                                                                " y_puts ***\n", 
+                                                                "y_puts ***\n", 
                                                                 rs->rs_ip); 
 
                                         }
@@ -1209,7 +1209,7 @@ restartthread:
                                                 * do not touch the ptr pcd until
                                                 * the beginning of next
                                                 * iteration, as
-                                                * tmem_remotified_pcd_status_
+                                                * tmem_pcd_status_
                                                 * update could have
                                                 * disassociated this pcd.
                                                 */
@@ -2573,6 +2573,7 @@ sysfssucc:
            debug(pcd_remote_associate);
            debug(timed_fwd_filter);
            */
+        debug(tmem_pcd_status_update);
         debug(pcd_disassociate);
         debug(tmem_pgp_free_data);
         debug(ktb_remotify_puts);
@@ -2611,13 +2612,14 @@ sysfssucc:
         show_msg(ktb_remotify_puts);
         show_msg(ktb_remotified_get_page);
         show_msg(ktb_remote_get);
-        show_msg(tmem_pgp_free_data);
-        show_msg(pcd_disassociate);
         //end en/dis-able ktb_main.c output
 
         //-------------------------
         //en/dis-able tmem.c output
         //-------------------------
+        show_msg(tmem_pgp_free_data);
+        show_msg(pcd_disassociate);
+        show_msg(tmem_pcd_status_update);
         //show_msg(pcd_associate);
         /*
            show_msg(pcd_remote_associate);
