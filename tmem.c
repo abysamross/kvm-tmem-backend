@@ -413,8 +413,6 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * for remotification. it should be deleted now.
                  */
                 //failed_tmem_remotify_puts++;
-                if(can_debug(tmem_pcd_status_update))
-                        pr_info("@@@@ removing from pcd_tree_roots @@@@\n");
 
                 if(pcd->status == 1)
                 {
