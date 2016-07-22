@@ -843,7 +843,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                 if(pcd->currently == ASSOCIATING) || 
                                 (pcd->currently == REMOTIFYING)
                                 */
-                                if(pcd->currently != NORMAL)
+                                if(pcd->currently == NORMAL)
                                 {
                                         if(!list_empty(&pcd->system_rscl_pcds))
                                         {
@@ -1065,7 +1065,7 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                         if(pcd->currently == ASSOCIATING) || 
                         (pcd->currently == REMOTIFYING)
                         */
-                        if(pcd->currently != NORMAL)
+                        if(pcd->currently == NORMAL)
                         {
                                 if(!list_empty(&pcd->system_rscl_pcds))
                                 {
