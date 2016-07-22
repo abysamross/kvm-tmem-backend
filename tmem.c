@@ -315,6 +315,8 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 pr_info("@@@@ updating nexpcd @@@@ \n");
                 if(nexpcd != NULL)
                 {
+                pr_info("old nexpcd address: %lx\n", (unsigned long)nexpcd);
+
                 pr_info("@@@@ nexpcd->firstbyte: %u, nexpcd->status: %d,"
                         " nexpcd->currently: %d, nextpcd->remote_ip: %s,"
                         " nexpcd->remote_id: %llu, nexpcd->system_page: %s"
@@ -331,7 +333,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         {
                 pr_info("@@@@ after updating nexpcd @@@@ \n");
 
-                pr_info("nexpcd address: %lx\n", (unsigned long)nexpcd);
+                pr_info("new nexpcd address: %lx\n", (unsigned long)nexpcd);
 
                 pr_info("@@@@ nexpcd->firstbyte: %u, nexpcd->status: %d,"
                         " nexpcd->currently: %d, nextpcd->remote_ip: %s,"

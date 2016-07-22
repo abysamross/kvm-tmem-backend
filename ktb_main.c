@@ -1362,6 +1362,7 @@ restartthread:
                         }
                         //read_lock(&(tmem_system.system_list_rwlock));
                         //write_lock(&(tmem_system.system_list_rwlock));
+                        smp_mb();
                 }
                 //read_unlock(&(tmem_system.system_list_rwlock));
                 write_unlock(&(tmem_system.system_list_rwlock));
