@@ -1101,6 +1101,12 @@ restartthread:
 
                         vaddr1 = page_address(page);
                         memset(vaddr1, 0, PAGE_SIZE);
+
+                        pr_info("new pcd address: %lx\n", (unsigned long)pcd);
+
+                        BUG_ON(pcd == NULL);
+                        BUG_ON(pcd->system_page == NULL);
+
                         firstbyte = tmem_get_first_byte(pcd->system_page);
 
                         /*
