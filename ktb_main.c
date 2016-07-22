@@ -1167,8 +1167,7 @@ restartthread:
                                                         " ktb_remotify_puts"
                                                         " *** \n");
                                 }
-
-                                if(bloom_res == true)
+                                else if(bloom_res == true)
                                 {
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | the rscl"
@@ -1181,7 +1180,6 @@ restartthread:
                                         if(tcp_client_snd_page(rs, page,\
                                                                &remote_id) < 0 )
                                         {
-                                                failed_tmem_remotify_puts++;
                                                 if(can_show(ktb_remotify_puts))
                                                         pr_info("*** mtp | page"
                                                                 " was NOT FOUND"
@@ -1189,6 +1187,7 @@ restartthread:
                                                                 " | ktb_remotif"
                                                                 " y_puts ***\n", 
                                                                 rs->rs_ip); 
+
                                         }
                                         else
                                         {
@@ -1202,15 +1201,10 @@ restartthread:
                                                                 "puts *** \n",
                                                                 rs->rs_ip,
                                                                 remote_id);
-                                        /*
-                                           tmem_remotified_pcd_status_update(
-                                           pcd,firstbyte,remote_id,rs->rs_ip,
-                                           &rdedup);
-                                         */
-                                               tmem_remotified_pcd_status_update
-                                               (pcd,nexpcd,firstbyte,remote_id,
-                                                rs->rs_ip, &res);
 
+                                               tmem_pcd_status_update
+                                               (pcd,nexpcd,firstbyte,remote_id,
+                                                rs->rs_ip, 1, &res);
                                                /* 
                                                 * do not touch the ptr pcd until
                                                 * the beginning of next
@@ -1236,17 +1230,38 @@ restartthread:
                                                         "ktb_remotify_puts***\n"
                                                         ,rs->rs_ip);
                                 }
+
+                                tmem_pcd_status_update(pcd, nexpcd, firstbyte,
+                                                       remote_id, rs->rs_ip, 0,
+                                                       &res);
+
+                                if(can_debug(ktb_remotify_puts))
+                                        pr_info("system_list_rwlock LOCKED"
+                                                " ktb_remotify_puts \n");
+                               /* 
+                                * do not touch the ptr pcd until
+                                * the beginning of next
+                                * iteration, as
+                                * tmem_remotified_pcd_status_
+                                * update could have
+                                * disassociated this pcd.
+                                */
                         }
                         up_read(&rs_rwmutex);
                         __free_page(page);
 
                         if((res == true) )
                         {
+                                succ_tmem_remotify_puts++;
                                 succ_count++;
                                 if(evict_status == 1)
                                         --sevict_count;
                                 else if(evict_status == 2)
                                         --devict_count;
+                        }
+                        else
+                        {
+                                failed_tmem_remotify_puts++;
                         }
                         /*
                         NOTE: this is now being done from within the
@@ -1267,7 +1282,6 @@ restartthread:
                                                 " ktb_remotify_puts \n");
                         }
                         */
-
                         if(can_show(ktb_remotify_puts)) 
                         { 
                                 pr_info(" *** mtp | #unique system pages: %llu,"

@@ -266,10 +266,10 @@ void custom_radix_tree_destroy(struct radix_tree_root *root,\
 /******************************************************************************/
 /*					   MAIN PCD, REMOTIFY & DEDUP ROUTINES*/
 /******************************************************************************/
-void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
-                                    struct tmem_page_content_descriptor *nexpcd,
-				       uint8_t firstbyte, uint64_t remote_id,
-				       char *rs_ip, bool *res)
+void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
+                            struct tmem_page_content_descriptor *nexpcd,
+			    uint8_t firstbyte, uint64_t remote_id,
+			    char *rs_ip, int remote_match, bool *res)
 {
 	char *ip = NULL;
 	ip = kmalloc(16 * sizeof(char), GFP_KERNEL);
@@ -319,7 +319,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * get a remote associated pcd that is already in
                  * local_only_list
                  */
-                failed_tmem_remotify_puts++;
+                //failed_tmem_remotify_puts++;
 
                 //if(!list_empty(&pcd->system_rscl_pcds))
                 //{
@@ -331,20 +331,31 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 goto getout;
         }
 
-	/* delete this pcd from the rbtree pcd_tree_roots[firstbyte] */
-	rb_erase(&pcd->pcd_rb_tree_node,\
-		 &(tmem_system.pcd_tree_roots[firstbyte]));
-	/* reinit the struct for safety for now */
-	RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
         /* 
-         * free the pcd->system_page. it is not required as either it is marked
-         * for disassociation or it was successfully remotified.
+         * remove the pcd from the pcd_tree_roots only if a match was found at
+         * a remote server
          */
-        __free_page(pcd->system_page);
-        pcd->system_page = NULL;
+        if(
+                (remote_match == 1) 
+                        ||
+                ((remote_match == 0) && pcd->currently == DISASSOCIATING)
+        )
+        {
+	        /* delete this pcd from the rbtree pcd_tree_roots[firstbyte] */
+                rb_erase(&pcd->pcd_rb_tree_node,\
+                         &(tmem_system.pcd_tree_roots[firstbyte]));
+                /* reinit the struct for safety for now */
+                RB_CLEAR_NODE(&pcd->pcd_rb_tree_node);
+                /* 
+                 * free the pcd->system_page. it is not required as either it is
+                 * marked for disassociation or it was successfully remotified.
+                 */
+                __free_page(pcd->system_page);
+                pcd->system_page = NULL;
 
-        /* decrement the count of unique pages */
-        system_unique_pages--;
+                /* decrement the count of unique pages */
+                system_unique_pages--;
+        }
 
         if(pcd->currently == DISASSOCIATING)
         {
@@ -352,7 +363,7 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * this pcd was choosen to be disassociated when it was explored
                  * for remotification. it should be deleted now.
                  */
-                failed_tmem_remotify_puts++;
+                //failed_tmem_remotify_puts++;
 
                 if(pcd->status == 1)
                 {
@@ -388,6 +399,11 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 goto getout;
         }
 
+        pcd->currently = NORMAL;
+
+        if(remote_match == 0)
+                goto getout;
+
 	pcd->status = 2;
 	pcd->remote_ip = ip;
 	pcd->remote_id = remote_id;
@@ -406,10 +422,10 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                  * This will update the nexpcd to point to the latest valid next
                  * pcd in list
                  */
+
         list_add_tail(&pcd->system_rs_pcds,\
                       &(tmem_system.remote_shared_list));
 	//}
-        pcd->currently = NORMAL;
 
         if(can_debug(tmem_remotified_pcd_status_update))
         {
@@ -417,7 +433,6 @@ void tmem_remotified_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         pr_info(" OMG: pcd->system_page != NULL even after"
                                 "__free_page \n");
         }
-        succ_tmem_remotify_puts++;
 	*res = true;
         /*
          * hack_safe_nexpcd:2
