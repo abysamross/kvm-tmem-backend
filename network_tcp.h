@@ -87,6 +87,9 @@ extern int tcp_client_no_wait_snd_page(struct remote_server *, struct page *,\
 		                       uint64_t *);
 extern int tcp_client_remotified_get(struct remote_server *, struct page *,\
 				     uint8_t, uint64_t);
+extern int tcp_client_no_wait_remotified_get(struct remote_server *, 
+                                             struct page *,\
+				             uint8_t, uint64_t);
 /*
    extern int tcp_client_passon(char *);
    extern struct bloom_filter *bflt;

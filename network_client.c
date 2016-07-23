@@ -229,6 +229,89 @@ recv_out:
         return totread?totread:len;
 }
 
+int tcp_client_no_wait_remotified_get(struct remote_server *rs,
+                                      struct page *page, uint8_t firstbyte,
+                                      uint64_t remote_id)
+{
+        int ret = 0, len = 49;
+        //char in_msg[len+1];
+        char out_msg[len+1];
+        void *page_vaddr;
+        struct socket *conn_socket; 
+
+        //DECLARE_WAIT_QUEUE_HEAD(rget_wait);                               
+
+        conn_socket = rs->lcc_socket;
+	page_vaddr = page_address(page);
+	memset(page_vaddr, 0, PAGE_SIZE);
+
+        if(can_show(tcp_client_remotified_get))
+		pr_info(" *** mtp | client sending RGET:PAGE to: %s for page"
+			" having firstbyte: %u, remote index: %llu |"
+			" tcp_client_remotified_get ***\n", 
+			rs->rs_ip, firstbyte, remote_id); 
+
+        memset(out_msg, 0, len+1);                                        
+        snprintf(out_msg, sizeof(out_msg), "RGET:PAGE:%u:%llu",\
+		 firstbyte, remote_id);
+
+        mutex_lock(&rs->lcc_lock);
+
+        tcp_client_send(conn_socket, out_msg, strlen(out_msg), MSG_DONTWAIT, 0);
+	/* 
+	 * chose not to have a wait queue here, as page receive is a huge
+	 * receive and tcp_client_receive won't return until it gets/issues 4096
+	 * kernel_recvmsg calls or it receives an explicit FAIL.
+
+        wait_event_timeout(rget_wait,\
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           5*HZ);   
+
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))              
+        {
+	 */
+                if(can_show(tcp_client_remotified_get))
+                        pr_info(" *** mtp | client receiving message "
+                                " page_vaddr: %lx|"
+                                " tcp_client_remotified_get ***\n",
+                                (unsigned long)page_vaddr);
+		ret = 
+		tcp_client_receive(conn_socket, page_vaddr, PAGE_SIZE,\
+				   MSG_DONTWAIT, 1);
+                
+                if(can_show(tcp_client_remotified_get))
+                        pr_info(" *** mtp | client received: %d bytes | "
+                                "tcp_client_remotified_get ***\n", ret);
+
+		if(ret != PAGE_SIZE)
+			goto rget_fail;
+
+		if(can_show(tcp_client_remotified_get))
+			pr_info(" *** mtp | RGET:PAGE to: %s for page having"
+				" firstbyte: %u, remote index: %llu SUCCESS |"
+				" tcp_client_remotified_get ***\n", rs->rs_ip,
+				firstbyte, remote_id);                           
+        /*
+        }
+        else                                                              
+                goto rget_fail;                                                  
+        */
+
+        mutex_unlock(&rs->lcc_lock);
+        return 0;
+
+rget_fail:
+
+        mutex_unlock(&rs->lcc_lock);
+
+	if(can_show(tcp_client_remotified_get))
+		pr_info(" *** mtp | RGET:PAGE to: %s for page having"
+			" firstbyte: %u, remote index: %llu FAILED |"
+			" tcp_client_remotified_get ***\n", rs->rs_ip,
+			firstbyte, remote_id);                           
+         return -1;
+}
+
 int tcp_client_remotified_get(struct remote_server *rs, struct page *page,\
 			      uint8_t firstbyte, uint64_t remote_id)
 {

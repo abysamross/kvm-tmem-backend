@@ -758,9 +758,10 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
                                                 " ***\n", rs_tmp->rs_ip,
                                                 rs_tmp->rs_port);
 
-                                if(tcp_client_remotified_get(rs_tmp, page,\
-                                                             firstbyte,\
-                                                             remote_id) < 0)
+                                if(tcp_client_no_wait_remotified_get(
+                                                                rs_tmp, page,\
+                                                                firstbyte,\
+                                                                remote_id) < 0)
                                 {
                                         if(can_show(ktb_remotified_get_page))
                                                 pr_info(" *** mtp | page with"
