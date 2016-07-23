@@ -1183,7 +1183,7 @@ restartthread:
                                                         " ***\n", rs->rs_ip);
 
                                         /**/
-                                        if(tcp_client_snd_page(rs, page,\
+                                        if(tcp_client_no_wait_snd_page(rs, page,\
                                                                &remote_id) < 0 )
                                         {
                                                 if(can_show(ktb_remotify_puts))
