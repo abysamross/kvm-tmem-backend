@@ -327,7 +327,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 }
         }
 
-        smp_mb();
+        //smp_mb();
         list_safe_reset_next(pcd, (*xnexpcd), system_rscl_pcds);
 
         if(can_debug(tmem_pcd_status_update))
