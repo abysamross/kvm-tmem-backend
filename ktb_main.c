@@ -31,7 +31,8 @@ MODULE_AUTHOR("Aby Sam Ross");
    module_param(evict, int, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
    MODULE_PARM_DESC(evict, "Argument that specifies eviction policy");
    */
-static int delay = 120;
+static int delaytff = 360;
+static int delaykrf = 540;
 int dynamic_eviction = 0;
 int static_eviction = 1;
 int bflt_bit_size = 268435456;
@@ -248,7 +249,7 @@ int timed_fwd_filter(void* data)
         {
                 set_current_state(TASK_INTERRUPTIBLE);
 
-                jleft = schedule_timeout(delay*HZ);
+                jleft = schedule_timeout(delaytff*HZ);
 
                 if(can_show(timed_fwd_filter))
                         pr_info("*** mtp | Bloom filter transfer timer expired!"
@@ -1022,7 +1023,7 @@ restartthread:
 
                 set_current_state(TASK_INTERRUPTIBLE);
 
-                jleft = schedule_timeout(7*HZ);
+                jleft = schedule_timeout(delaykrf*HZ);
 
                 if(can_show(ktb_remotify_puts)) 
                         pr_info(" *** mtp | Timeout Expired: %lu |"
