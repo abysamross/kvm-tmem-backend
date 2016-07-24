@@ -1320,6 +1320,7 @@ static void pcd_disassociate(struct tmem_page_descriptor *pgp,\
          * anyone actually accessing it. And causing a pcd in the remote server
          * to be moved to remote_tree without this guy actually acessing it
          * remotely.
+         * NOTE: this will eventually be deleted by tmem_pcd_status_update()
          */
         if(pcd->currently != NORMAL)
         {
