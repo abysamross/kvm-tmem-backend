@@ -513,6 +513,19 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                                 "__free_page \n");
         }
 	*res = true;
+
+        //if(can_debug(tmem_pcd_status_update))
+                pr_info(" exp1 | successfully remotified page with index: "
+                        "%u of object: %llu %llu %llu rooted at rb_tree slot: "
+                        "%u of pool: %u of client: %u, having firstbyte: %u | "
+                        " *** \n",
+                        pcd->pgp->index, pcd->pgp->obj->oid.oid[2],
+                        pcd->pgp->obj->oid.oid[1],
+                        pcd->pgp->obj->oid.oid[0],
+                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                        pcd->pgp->obj->pool->pool_id,
+                        pcd->pgp->obj->pool->associated_client->client_id,
+                        firstbyte);
         /*
          * hack_safe_nexpcd:2
          * to ensure that nexpcd points to a valid pcd I need to leave it locked
@@ -568,6 +581,23 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         pr_info(" *** mtp | got remotified page: %u, ip: %s, id: %llu |"
                 " tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
+
+        pr_info(" exp1_2 | successfully"
+                " got remotified page with"
+                " index: %u of object:"
+                " %llu %llu %llu rooted at"
+                " rb_tree slot: %u of"
+                " pool: %u of client:"
+                " %u, having firstbyte:"
+                " %u | *** \n",
+                pcd->pgp->index,
+                pcd->pgp->obj->oid.oid[2],
+                pcd->pgp->obj->oid.oid[1],
+                pcd->pgp->obj->oid.oid[0],
+                tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                pcd->pgp->obj->pool->pool_id,
+                pcd->pgp->obj->pool->associated_client->client_id,
+                firstbyte); 
 
 	ret = tmem_copy_to_client(client_page, page);
 

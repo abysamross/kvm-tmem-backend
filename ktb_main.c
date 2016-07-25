@@ -1270,38 +1270,46 @@ restartthread:
                         {
                                 succ_tmem_remotify_puts++;
                                 succ_count++;
-                                /*
-                                if(evict_status == 1)
-                                        --sevict_count;
-                                else if(evict_status == 2)
-                                        --devict_count;
+
+                                pr_info(" exp1 | successfully remotified page"
+                                        " with index: %u of object:"
+                                        " %llu %llu %llu rooted at rb_tree"
+                                        " slot: %u of pool: %u of"
+                                        " client: %u, having firstbyte: %u"
+                                        " | *** \n", pcd->pgp->index,
+                                        pcd->pgp->obj->oid.oid[2],
+                                        pcd->pgp->obj->oid.oid[1],
+                                        pcd->pgp->obj->oid.oid[0],
+                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                        pcd->pgp->obj->pool->pool_id,
+                                        pcd->pgp->obj->pool->associated_client->client_id,
+                                        firstbyte);
+                        /*
+                                if(evict_status == 1) --sevict_count; else
+                                if(evict_status == 2) --devict_count;
                                 */
-                        }
-                        else
-                        {
-                                failed_tmem_remotify_puts++;
+                        } 
+                        else 
+                        { 
+                                failed_tmem_remotify_puts++; 
                         }
                         /*
                         NOTE: this is now being done from within the
-                        tmem_remotified_pcd_status_update() function
-                        itself
-                        else
+                        tmem_remotified_pcd_status_update() function itself else
                         {
-                                 * hack_safe_nexpcd:3
-                                 * to ensure that nexpcd points to a valid pcd I
-                                 * need to leave it locked and update the nexpcd
-                                 * as many pcd could have been removed from the
-                                 * list by pcd_disassociate()
+                                 * hack_safe_nexpcd:3 to ensure that nexpcd
+                                 * points to a valid pcd I need to leave it
+                                 * locked and update the nexpcd as many pcd
+                                 * could have been removed from the list by
+                                 * pcd_disassociate()
                                 write_lock(&(tmem_system.system_list_rwlock));
                                 list_safe_reset_next(pcd, nexpcd,\
-                                                system_rscl_pcds);
+                                system_rscl_pcds);
                                 if(can_debug(ktb_remotify_puts))
-                                        pr_info("system_list_rwlock LOCKED"
-                                                " ktb_remotify_puts \n");
-                        }
+                                pr_info("system_list_rwlock LOCKED" "
+                                ktb_remotify_puts \n"); }
                         */
-                        if(can_show(ktb_remotify_puts)) 
-                        { 
+                        if(can_show(ktb_remotify_puts)) { 
                                 pr_info(" *** mtp | #unique system pages: %llu,"
                                         " dynamic_eviction enabled: %s,"
                                         " dynamic_evict_count: %lld,"
