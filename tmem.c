@@ -315,6 +315,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
         if(can_debug(tmem_pcd_status_update))
         {
                 pr_info("@@@@ updating nexpcd @@@@ \n");
+                /*
                 if(nexpcd != NULL)
                 {
                 pr_info("old nexpcd address: %lx\n", (unsigned long)nexpcd);
@@ -326,6 +327,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         nexpcd->currently, nexpcd->remote_ip, nexpcd->remote_id, 
                         (nexpcd->system_page==NULL)?"NULL":"NOT NULL"); 
                 }
+                */
         }
 
         //smp_mb();
