@@ -294,6 +294,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	 */
 	BUG_ON(pcd->remote_ip != NULL);
 	BUG_ON(pcd->status == 2);
+        BUG_ON(*res == true);
 
         if(can_debug(tmem_pcd_status_update))
                 pr_info("@@@@@@ currently: %d, status: %d, firstbyte: %u,"
@@ -515,6 +516,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 	*res = true;
 
         //if(can_debug(tmem_pcd_status_update))
+        /*
                 pr_info(" exp1 | successfully remotified page with index: "
                         "%u of object: %llu %llu %llu rooted at rb_tree slot: "
                         "%u of pool: %u of client: %u, having firstbyte: %u | "
@@ -526,6 +528,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         pcd->pgp->obj->pool->pool_id,
                         pcd->pgp->obj->pool->associated_client->client_id,
                         firstbyte);
+        */
         /*
          * hack_safe_nexpcd:2
          * to ensure that nexpcd points to a valid pcd I need to leave it locked
@@ -557,7 +560,27 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         page = alloc_page(GFP_ATOMIC);
 
         if(page == NULL)
+        {
+                failed_tmem_remotified_gets++;
+
+                pr_info(" exp2 | failed to"
+                        " get remotified page with"
+                        " index: %u of object:"
+                        " %llu %llu %llu rooted at"
+                        " rb_tree slot: %u of"
+                        " pool: %u of client:"
+                        " %u, having firstbyte:"
+                        " %u | tmem_remotified_copy_to_client *** \n",
+                        pcd->pgp->index,
+                        pcd->pgp->obj->oid.oid[2],
+                        pcd->pgp->obj->oid.oid[1],
+                        pcd->pgp->obj->oid.oid[0],
+                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                        pcd->pgp->obj->pool->pool_id,
+                        pcd->pgp->obj->pool->associated_client->client_id,
+                        pcd->firstbyte); 
                 goto exit_remote;
+        }
 
         vaddr = page_address(page);
         memset(vaddr, 0, PAGE_SIZE);
@@ -582,32 +605,54 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
                 " tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
 
-        pr_info(" exp1_2 | successfully"
-                " got remotified page with"
-                " index: %u of object:"
-                " %llu %llu %llu rooted at"
-                " rb_tree slot: %u of"
-                " pool: %u of client:"
-                " %u, having firstbyte:"
-                " %u | *** \n",
-                pcd->pgp->index,
-                pcd->pgp->obj->oid.oid[2],
-                pcd->pgp->obj->oid.oid[1],
-                pcd->pgp->obj->oid.oid[0],
-                tmem_oid_hash(&(pcd->pgp->obj->oid)),
-                pcd->pgp->obj->pool->pool_id,
-                pcd->pgp->obj->pool->associated_client->client_id,
-                firstbyte); 
 
 	ret = tmem_copy_to_client(client_page, page);
 
-        if(ret == 0)
-                succ_tmem_remotified_gets++;
-        else
-                failed_tmem_remotified_gets++;
-
 free_exit_remote: 
+
+        if(ret == 0)
+        {
+                succ_tmem_remotified_gets++;
+                pr_info(" exp2 | successfully"
+                        " got remotified page with"
+                        " index: %u of object:"
+                        " %llu %llu %llu rooted at"
+                        " rb_tree slot: %u of"
+                        " pool: %u of client:"
+                        " %u, having firstbyte:"
+                        " %u | tmem_remotified_copy_to_client *** \n",
+                        pcd->pgp->index,
+                        pcd->pgp->obj->oid.oid[2],
+                        pcd->pgp->obj->oid.oid[1],
+                        pcd->pgp->obj->oid.oid[0],
+                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                        pcd->pgp->obj->pool->pool_id,
+                        pcd->pgp->obj->pool->associated_client->client_id,
+                        firstbyte); 
+        }
+        else
+        {
+                failed_tmem_remotified_gets++;
+                pr_info(" exp2 | failed to"
+                        " get remotified page with"
+                        " index: %u of object:"
+                        " %llu %llu %llu rooted at"
+                        " rb_tree slot: %u of"
+                        " pool: %u of client:"
+                        " %u, having firstbyte:"
+                        " %u | tmem_remotified_copy_to_client *** \n",
+                        pcd->pgp->index,
+                        pcd->pgp->obj->oid.oid[2],
+                        pcd->pgp->obj->oid.oid[1],
+                        pcd->pgp->obj->oid.oid[0],
+                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                        pcd->pgp->obj->pool->pool_id,
+                        pcd->pgp->obj->pool->associated_client->client_id,
+                        firstbyte); 
+        }
+
         __free_page(page);
+
 exit_remote:
         return ret;
 }

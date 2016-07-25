@@ -1284,7 +1284,7 @@ restartthread:
                                         pcd->pgp->obj->pool->pool_id,
                                         pcd->pgp->obj->pool->associated_client->client_id,
                                         firstbyte);
-                        /*
+                                /*
                                 if(evict_status == 1) --sevict_count; else
                                 if(evict_status == 2) --devict_count;
                                 */
@@ -1292,6 +1292,19 @@ restartthread:
                         else 
                         { 
                                 failed_tmem_remotify_puts++; 
+                                pr_info(" exp1 | failed to remotify page"
+                                        " with index: %u of object:"
+                                        " %llu %llu %llu rooted at rb_tree"
+                                        " slot: %u of pool: %u of"
+                                        " client: %u, having firstbyte: %u"
+                                        " | *** \n", pcd->pgp->index,
+                                        pcd->pgp->obj->oid.oid[2],
+                                        pcd->pgp->obj->oid.oid[1],
+                                        pcd->pgp->obj->oid.oid[0],
+                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                        pcd->pgp->obj->pool->pool_id,
+                                        pcd->pgp->obj->pool->associated_client->client_id,
+                                        firstbyte);
                         }
                         /*
                         NOTE: this is now being done from within the
