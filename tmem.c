@@ -12,6 +12,11 @@
 /******************************************************************************/
 /*							   EXTERN DECLARATIONS*/
 /******************************************************************************/
+
+extern u64 test_remotified_get;
+extern u64 test_remotified_get_succ;
+extern u64 test_remotified_get_fail;
+
 extern int debug_pcd_remote_associate;
 extern int debug_pcd_associate;
 extern int debug_pcd_disassociate;
@@ -561,12 +566,13 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 
         page = alloc_page(GFP_ATOMIC);
 
-        if(page == NULL)
+        if((pcd->pgp->obj->oid.oid[2] == 0) && 
+           (pcd->pgp->obj->oid.oid[1] == 0) &&
+           (pcd->pgp->obj->oid.oid[0] == 272842))
         {
-                failed_tmem_remotified_gets++;
-
-                pr_info(" exp2 | failed to"
-                        " get remotified page with"
+                test_remotified_get++;
+                pr_info(" exp2A | getting"
+                        " remotified page with"
                         " index: %u of object:"
                         " %llu %llu %llu rooted at"
                         " rb_tree slot: %u of"
@@ -579,8 +585,36 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
                         pcd->pgp->obj->oid.oid[0],
                         tmem_oid_hash(&(pcd->pgp->obj->oid)),
                         pcd->pgp->obj->pool->pool_id,
-                        pcd->pgp->obj->pool->associated_client->client_id,
+                       pcd->pgp->obj->pool->associated_client->client_id,
                         pcd->firstbyte); 
+        }
+
+        if(page == NULL)
+        {
+                failed_tmem_remotified_gets++;
+
+                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                   (pcd->pgp->obj->oid.oid[1] == 0) &&
+                   (pcd->pgp->obj->oid.oid[0] == 272842))
+                {
+                        test_remotified_get_fail++;
+                        pr_info(" exp2C | failed to"
+                                " get remotified page with"
+                                " index: %u of object:"
+                                " %llu %llu %llu rooted at"
+                                " rb_tree slot: %u of"
+                                " pool: %u of client:"
+                                " %u, having firstbyte:"
+                                " %u | tmem_remotified_copy_to_client *** \n",
+                                pcd->pgp->index,
+                                pcd->pgp->obj->oid.oid[2],
+                                pcd->pgp->obj->oid.oid[1],
+                                pcd->pgp->obj->oid.oid[0],
+                                tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                pcd->pgp->obj->pool->pool_id,
+                               pcd->pgp->obj->pool->associated_client->client_id,
+                                pcd->firstbyte); 
+                }
                 goto exit_remote;
         }
 
@@ -615,7 +649,12 @@ free_exit_remote:
         if(ret == 0)
         {
                 succ_tmem_remotified_gets++;
-                pr_info(" exp2 | successfully"
+                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                   (pcd->pgp->obj->oid.oid[1] == 0) &&
+                   (pcd->pgp->obj->oid.oid[0] == 272842))
+                {
+                        test_remotified_get_succ++;
+                pr_info(" exp2B | successfully"
                         " got remotified page with"
                         " index: %u of object:"
                         " %llu %llu %llu rooted at"
@@ -631,11 +670,18 @@ free_exit_remote:
                         pcd->pgp->obj->pool->pool_id,
                         pcd->pgp->obj->pool->associated_client->client_id,
                         firstbyte); 
+                }
         }
         else
         {
                 failed_tmem_remotified_gets++;
-                pr_info(" exp2 | failed to"
+
+                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                   (pcd->pgp->obj->oid.oid[1] == 0) &&
+                   (pcd->pgp->obj->oid.oid[0] == 272842))
+                {
+                        test_remotified_get_fail++;
+                pr_info(" exp2C | failed to"
                         " get remotified page with"
                         " index: %u of object:"
                         " %llu %llu %llu rooted at"
@@ -651,6 +697,7 @@ free_exit_remote:
                         pcd->pgp->obj->pool->pool_id,
                         pcd->pgp->obj->pool->associated_client->client_id,
                         firstbyte); 
+                }
         }
 
         __free_page(page);

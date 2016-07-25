@@ -31,8 +31,8 @@ MODULE_AUTHOR("Aby Sam Ross");
    module_param(evict, int, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
    MODULE_PARM_DESC(evict, "Argument that specifies eviction policy");
    */
-static int delaytff = 360;
-static int delaykrf = 540;
+static int delaytff = 120;
+static int delaykrf = 180;
 int dynamic_eviction = 0;
 int static_eviction = 1;
 int bflt_bit_size = 268435456;
@@ -135,6 +135,13 @@ int show_msg_ktb_remote_get = 0;
 /*                                                         Debugfs files/vars */
 /******************************************************************************/ 
 struct dentry *root = NULL;
+u64 test_remotify;
+u64 test_remotify_succ;
+u64 test_remotify_fail;
+
+u64 test_remotified_get;
+u64 test_remotified_get_succ;
+u64 test_remotified_get_fail;
 
 u64 tmem_puts;
 u64 succ_tmem_puts;
@@ -248,6 +255,7 @@ int timed_fwd_filter(void* data)
         /*
         while(!kthread_should_stop())
         {
+        */
                 set_current_state(TASK_INTERRUPTIBLE);
 
                 jleft = schedule_timeout(delaytff*HZ);
@@ -256,7 +264,6 @@ int timed_fwd_filter(void* data)
                         pr_info("*** mtp | Bloom filter transfer timer expired!"
                                 " TIMER VALUE: %lu secs | timed_fwd_filter"
                                 " *** \n", (jleft/HZ));
-        */
 
                 /*for now reset these counters
                   tmem_remote_dedups = 0;
@@ -1028,7 +1035,6 @@ restartthread:
                    " ktb_remotify_puts ***\n");
                    */
 
-                /*
                 set_current_state(TASK_INTERRUPTIBLE);
 
                 jleft = schedule_timeout(delaykrf*HZ);
@@ -1039,6 +1045,7 @@ restartthread:
 
                 //__set_current_state(TASK_RUNNING);
 
+                /*
                 if(signal_pending(current))
                         goto exit_remotify;
                 */
@@ -1169,6 +1176,25 @@ restartthread:
                                         (pcd->system_page == NULL)?
                                         "NULL":"NOT NULL",
                                         pcd->currently);
+                        if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                           (pcd->pgp->obj->oid.oid[1] == 0) &&
+                           (pcd->pgp->obj->oid.oid[0] == 272842))
+                        {
+                                test_remotify++;
+                                pr_info(" exp1A | remotifying page"
+                                        " with index: %u of object:"
+                                        " %llu %llu %llu rooted at rb_tree"
+                                        " slot: %u of pool: %u of"
+                                        " client: %u, having firstbyte: %u"
+                                        " | *** \n", pcd->pgp->index,
+                                        pcd->pgp->obj->oid.oid[2],
+                                        pcd->pgp->obj->oid.oid[1],
+                                        pcd->pgp->obj->oid.oid[0],
+                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                        pcd->pgp->obj->pool->pool_id,
+                                        pcd->pgp->obj->pool->associated_client->client_id,
+                                        firstbyte);
+                        }
 
                         read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                         if(can_debug(ktb_remotify_puts))
@@ -1286,7 +1312,12 @@ restartthread:
                                 succ_tmem_remotify_puts++;
                                 succ_count++;
 
-                                pr_info(" exp1 | successfully remotified page"
+                                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                                   (pcd->pgp->obj->oid.oid[1] == 0) &&
+                                   (pcd->pgp->obj->oid.oid[0] == 272842))
+                                {
+                                        test_remotify_succ++;
+                                pr_info(" exp1B | successfully remotified page"
                                         " with index: %u of object:"
                                         " %llu %llu %llu rooted at rb_tree"
                                         " slot: %u of pool: %u of"
@@ -1299,6 +1330,9 @@ restartthread:
                                         pcd->pgp->obj->pool->pool_id,
                                         pcd->pgp->obj->pool->associated_client->client_id,
                                         firstbyte);
+                                }
+
+
                                 /*
                                 if(evict_status == 1) --sevict_count; else
                                 if(evict_status == 2) --devict_count;
@@ -1307,7 +1341,12 @@ restartthread:
                         else 
                         { 
                                 failed_tmem_remotify_puts++; 
-                                pr_info(" exp1 | failed to remotify page"
+                                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                                   (pcd->pgp->obj->oid.oid[1] == 0) &&
+                                   (pcd->pgp->obj->oid.oid[0] == 272842))
+                                {
+                                        test_remotify_fail++;
+                                pr_info(" exp1C | failed to remotify page"
                                         " with index: %u of object:"
                                         " %llu %llu %llu rooted at rb_tree"
                                         " slot: %u of pool: %u of"
@@ -1320,6 +1359,7 @@ restartthread:
                                         pcd->pgp->obj->pool->pool_id,
                                         pcd->pgp->obj->pool->associated_client->client_id,
                                         firstbyte);
+                                }
                         }
                         /*
                         NOTE: this is now being done from within the
@@ -2592,6 +2632,20 @@ sysfssucc:
                                    &succ_tmem_page_invalidates);
                 debugfs_create_u64("page_invalidates_failed", S_IRUGO, root,\
                                    &failed_tmem_page_invalidates);
+
+                debugfs_create_u64("test_remotify", S_IRUGO, root,\
+                                   &test_remotify);
+                debugfs_create_u64("test_remotify_succ", S_IRUGO, root,\
+                                   &test_remotify_succ);
+                debugfs_create_u64("test_remotify_fail", S_IRUGO, root,\
+                                   &test_remotify_fail);
+
+                debugfs_create_u64("test_remotified_get", S_IRUGO, root,\
+                                   &test_remotified_get);
+                debugfs_create_u64("test_remotified_get_succ", S_IRUGO, root,\
+                                   &test_remotified_get_succ);
+                debugfs_create_u64("test_remotified_get_fail", S_IRUGO, root,\
+                                   &test_remotified_get_fail);
         }
 #endif
         /*
