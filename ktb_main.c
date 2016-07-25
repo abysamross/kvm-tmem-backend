@@ -245,6 +245,7 @@ int timed_fwd_filter(void* data)
 
         //set_freezable();
 
+        /*
         while(!kthread_should_stop())
         {
                 set_current_state(TASK_INTERRUPTIBLE);
@@ -255,6 +256,7 @@ int timed_fwd_filter(void* data)
                         pr_info("*** mtp | Bloom filter transfer timer expired!"
                                 " TIMER VALUE: %lu secs | timed_fwd_filter"
                                 " *** \n", (jleft/HZ));
+        */
 
                 /*for now reset these counters
                   tmem_remote_dedups = 0;
@@ -263,11 +265,12 @@ int timed_fwd_filter(void* data)
                   */
                 //__set_current_state(TASK_RUNNING);
 
+                /*
                 if(signal_pending(current))
                 {
                         goto exit_timed_fwd_filter;
                 }
-
+                */
 
                 if(tcp_client_fwd_filter(bflt) < 0)
                 {
@@ -278,7 +281,9 @@ int timed_fwd_filter(void* data)
                 }
                 //remote_puts();
                 //set_current_state(TASK_INTERRUPTIBLE);
+        /*
         }
+        */
         //__set_current_state(TASK_RUNNING);
 
 exit_timed_fwd_filter:
@@ -1012,15 +1017,18 @@ int ktb_remotify_puts(void)
          pr_info(" *** mtp | started eviction thread |"
          " ktb_remotify_puts ***\n");
          */
+        /*
 restartthread:
 
         while(!kthread_should_stop())
         {
+        */
                 /*
                    pr_info(" *** mtp | eviction thread firing |"
                    " ktb_remotify_puts ***\n");
                    */
 
+                /*
                 set_current_state(TASK_INTERRUPTIBLE);
 
                 jleft = schedule_timeout(delaykrf*HZ);
@@ -1033,6 +1041,7 @@ restartthread:
 
                 if(signal_pending(current))
                         goto exit_remotify;
+                */
 
                 /*
                 if((dynamic_eviction == 1) && (devict_count != 0))
@@ -1091,7 +1100,10 @@ restartthread:
                         if(can_debug(ktb_remotify_puts))
                                 pr_info(" system_list_rwlock UNLOCKED"
                                         " ktb_remotify_puts \n");
+                        /*
                         goto restartthread;
+                        */
+                        goto exit_remotify;
                 }
 
                 list_for_each_entry_safe(pcd, nexpcd,\
@@ -1168,7 +1180,10 @@ restartthread:
                         if((list_empty(&rs_head)))
                         {
                                 up_read(&rs_rwmutex);
+                                /*
                                 goto restartthread;
+                                */
+                                goto exit_remotify;
                         }
 
                         list_for_each_entry(rs, &(rs_head), rs_list)
@@ -1410,7 +1425,9 @@ restartthread:
                 if(can_debug(ktb_remotify_puts))
                         pr_info("system_list_rwlock UNLOCKED"
                                 " ktb_remotify_puts \n");
+                /*
         }
+        */
         //__set_current_state(TASK_RUNNING);
 exit_remotify:
 
