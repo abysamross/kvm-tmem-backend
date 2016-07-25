@@ -1034,9 +1034,11 @@ restartthread:
                 if(signal_pending(current))
                         goto exit_remotify;
 
+                /*
                 if((dynamic_eviction == 1) && (devict_count != 0))
                 {
                         evict_status = 2;
+                */
                         /*
                          * if dynamic eviction count > system_unique_pages we
                          * would like to limit it to system_unique_pages. But is
@@ -1045,6 +1047,7 @@ restartthread:
                          * want to avoid too many evictions from keeping the
                          * eviction thread busy using up cpu.
                          */
+                /*
                         if(devict_count >= system_unique_pages)
                         {
                                 //devict_count = system_unique_pages;
@@ -1053,8 +1056,11 @@ restartthread:
                                 (devict_count = system_unique_pages);
                         }
                 }
+                */
+                /*
                 else if(static_eviction && (system_unique_pages>=MAX_SYS_PAGES))
                 {
+                */
                         /*
                          * for all other settings like:
                          * - dynamic eviction being enabled but devict_count=0
@@ -1063,6 +1069,7 @@ restartthread:
                          *   going above MAX_SYS_PAGES static eviction kicks in.
                          *   as static eviction is always set.
                          */
+                /*
                         evict_status = 1;
                         sevict_count = REDUCE_SYS_PAGES_BY;
                 }
@@ -1070,6 +1077,7 @@ restartthread:
                 {
                         goto restartthread;
                 }
+                */
 
                 //read_lock(&(tmem_system.system_list_rwlock));
                 write_lock(&(tmem_system.system_list_rwlock));
@@ -1262,10 +1270,12 @@ restartthread:
                         {
                                 succ_tmem_remotify_puts++;
                                 succ_count++;
+                                /*
                                 if(evict_status == 1)
                                         --sevict_count;
                                 else if(evict_status == 2)
                                         --devict_count;
+                                */
                         }
                         else
                         {
@@ -1324,17 +1334,20 @@ restartthread:
                                 return 0;
                         }
 
+                        /*
                         if(evict_status == 1)
                         {
                                 if(sevict_count <= 0)
                                 {
                                         sevict_count = 0;
                                         evict_status = 0;
+                        */
                                         /*
                                          * hack_safe_nexpcd:5 to ensure that
                                          * nexpcd points to a valid pcd I had
                                          * left it locked
                                          */
+                        /*
                                         write_unlock(&\
                                         (tmem_system.system_list_rwlock));
                                         if(can_debug(ktb_remotify_puts))
@@ -1344,17 +1357,21 @@ restartthread:
                                         goto restartthread;
                                 }
                         }
+                        */
+                        /*
                         else if(evict_status == 2)
                         {
                                 if(devict_count <= 0)
                                 {
                                         devict_count = 0;
                                         evict_status = 0;
+                        */
                                         /*
                                          * hack_safe_nexpcd:6 to ensure that
                                          * nexpcd points to a valid pcd I had
                                          * left it locked
                                          */
+                        /*
                                         write_unlock(&\
                                         (tmem_system.system_list_rwlock));
                                         pr_info("system_list_rwlock UNLOCKED"
@@ -1362,6 +1379,7 @@ restartthread:
                                         goto restartthread;
                                 }
                         }
+                        */
                         //read_lock(&(tmem_system.system_list_rwlock));
                         //write_lock(&(tmem_system.system_list_rwlock));
                         //smp_mb();
