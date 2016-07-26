@@ -1153,7 +1153,7 @@ restartthread:
                            continue;
                            }
                            else
-                           */
+                        */
                         /*
                          * to protect this pcd from deleted.
                          */
@@ -1215,7 +1215,7 @@ restartthread:
                                 tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
                                                        0, "dummyip", 0,
                                                        &res);
-                                continue;
+                                goto skiprsiter;
                         }
 
 
@@ -1328,6 +1328,7 @@ restartthread:
                                 */
                         }
                         up_read(&rs_rwmutex);
+skiprsiter:
                         __free_page(page);
 
                         if((res == true) )
