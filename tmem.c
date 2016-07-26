@@ -350,7 +350,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                 pr_info("list head address: %lx\n",
                 (unsigned long)(&(tmem_system.remote_sharing_candidate_list)));
 
-                if(&nexpcd->system_rscl_pcds !=
+                if(&(nexpcd->system_rscl_pcds) !=
                 &(tmem_system.remote_sharing_candidate_list))
                 {
                 pr_info("@@@@ nexpcd->firstbyte: %u, nexpcd->status: %d,"
