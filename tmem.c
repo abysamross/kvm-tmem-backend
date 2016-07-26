@@ -342,16 +342,16 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
         if(can_debug(tmem_pcd_status_update))
         {
-                pr_info("@@@@ after updating nexpcd @@@@ \n");
+                if(can_debug(tmem_pcd_status_update))
+                {
+                        pr_info("@@@@ after updating nexpcd @@@@ \n");
 
                 pr_info("new nexpcd address: %lx\n", (unsigned long)nexpcd);
                 pr_info("list head address: %lx\n",
                 (unsigned long)(&(tmem_system.remote_sharing_candidate_list)));
 
-                if(((unsigned long)(nexpcd)) == (unsigned long)(&(tmem_system.remote_sharing_candidate_list)))
-                        pr_info("&&&\n");
-                /*
-                if(((unsigned long)(nexpcd)) != (unsigned long)(&(tmem_system.remote_sharing_candidate_list)))
+                if(&nexpcd->system_rscl_pcds !=
+                &(tmem_system.remote_sharing_candidate_list))
                 {
                 pr_info("@@@@ nexpcd->firstbyte: %u, nexpcd->status: %d,"
                         " nexpcd->currently: %d, nextpcd->remote_ip: %s,"
@@ -376,7 +376,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
                         firstbyte);
                 }
                 }
-                */
+                }
         }
         /* now you may remove him from rscl */
         /* 
