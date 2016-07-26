@@ -821,6 +821,7 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
 
       if(bflt->bitmap == NULL)
       {
+              if(can_debug(receive_bflt))
               pr_info(" !!!server[%d] failed to allocate memory for bflt bitmap"
                       "of rs: %s | receive_bflt !!!***\n", 
                       conn->thread_id, ip);
@@ -829,6 +830,7 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
 
       if(bloom_filter_add_hash_alg(bflt,"crc32c"))
       {
+              if(can_debug(receive_bflt))
               pr_info(" *** mtp | Adding crc32c algo to bloom filter"
                       "failed | ktb_main_init *** \n");
               goto bflt_alg_fail;
@@ -836,6 +838,7 @@ int receive_bflt(struct tcp_conn_handler_data *conn)
 
       if(bloom_filter_add_hash_alg(bflt,"sha1"))
       {
+              if(can_debug(receive_bflt))
               pr_info(" *** mtp | Adding sha1 algo to bloom filter"
                       " failed | ktb_main_init *** \n");
               goto bflt_alg_fail;
@@ -1066,7 +1069,10 @@ bfltresp:
 					 */
 					uint64_t id;
 					conn_data->in_buf = in_buf;
+
+					if(can_debug(connection_handler))
                                         pr_info(" ### PAGE### PAGE### PAGE### PAGE\n");
+
 					if(rcv_and_cmp_page(conn_data,&id)<0)
 						goto pagefail;
 
@@ -1086,6 +1092,7 @@ pageresp:
 			}
 			else if(memcmp(in_buf, "RGET", 4) == 0)
 			{
+				if(can_debug(connection_handler))
                                 pr_info(" ### RGET### RGET### RGET### RGET\n");
 				conn_data->in_buf = in_buf;
 				get_remote_page(conn_data);

@@ -28,6 +28,7 @@ extern int debug_custom_radix_tree_destroy;
 extern int debug_custom_radix_tree_node_destroy;
 extern int debug_pcd_add_to_remote_tree;
 extern int debug_tmem_pcd_status_update;
+extern int debug_tmem_remotified_copy_to_client;
 
 extern int show_msg_pcd_associate;
 extern int show_msg_pcd_disassociate;
@@ -39,7 +40,8 @@ extern int show_msg_custom_radix_tree_destroy;
 extern int show_msg_custom_radix_tree_node_destroy;
 extern int show_msg_pcd_remote_associate;
 extern int show_msg_pcd_add_to_remote_tree;
-extern int debug_tmem_pcd_status_update;
+extern int show_msg_tmem_pcd_status_update;
+extern int show_msg_tmem_remotified_copy_to_client;
 
 extern u64 tmem_dedups;
 extern u64 succ_tmem_dedups;
@@ -544,6 +546,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
          */
 getout:
 
+        if(can_debug(tmem_pcd_status_update))
         pr_info("@@@@@@ firstbyte: %u, remote_id: %llu, remote_ip: %s,"
                 " remote_match: %d, res: %s @@@@@@\n",
                 firstbyte, remote_id, rs_ip, remote_match,
@@ -571,6 +574,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
            (pcd->pgp->obj->oid.oid[0] == 272842))
         {
                 test_remotified_get++;
+                if(can_debug(tmem_remotified_copy_to_client))
                 pr_info(" exp2A | getting"
                         " remotified page with"
                         " index: %u of object:"
@@ -598,6 +602,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
                    (pcd->pgp->obj->oid.oid[0] == 272842))
                 {
                         test_remotified_get_fail++;
+                        if(can_debug(tmem_remotified_copy_to_client))
                         pr_info(" exp2C | failed to"
                                 " get remotified page with"
                                 " index: %u of object:"
@@ -628,6 +633,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 	firstbyte = pcd->firstbyte;
 	read_unlock(&(tmem_system.system_list_rwlock));
 
+        if(can_debug(tmem_remotified_copy_to_client))
         pr_info(" *** mtp | getting remotified page with firstbyte: %u, ip: %s,"
                 " id: %llu | tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
@@ -637,6 +643,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         if(ret < 0)
                 goto free_exit_remote;
 
+        if(can_debug(tmem_remotified_copy_to_client))
         pr_info(" *** mtp | got remotified page: %u, ip: %s, id: %llu |"
                 " tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
@@ -654,6 +661,7 @@ free_exit_remote:
                    (pcd->pgp->obj->oid.oid[0] == 272842))
                 {
                         test_remotified_get_succ++;
+                        if(can_debug(tmem_remotified_copy_to_client))
                 pr_info(" exp2B | successfully"
                         " got remotified page with"
                         " index: %u of object:"
@@ -681,6 +689,7 @@ free_exit_remote:
                    (pcd->pgp->obj->oid.oid[0] == 272842))
                 {
                         test_remotified_get_fail++;
+                if(can_debug(tmem_remotified_copy_to_client))
                 pr_info(" exp2C | failed to"
                         " get remotified page with"
                         " index: %u of object:"
@@ -731,12 +740,14 @@ int tmem_pcd_copy_to_client(struct page *client_page,\
 	{
                 tmem_remotified_gets++;
 		read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                if(can_debug(tmem_remotified_copy_to_client))
                 pr_info(" *** mtp |issuing remotified copy to client for page"
                         " with firstbyte: %u | tmem_pcd_copy_to_client *** \n",
                         firstbyte);
 
 		ret = tmem_remotified_copy_to_client(client_page, pcd);
 
+                if(can_debug(tmem_remotified_copy_to_client))
                 pr_info(" *** mtp |remotified copy to client for page"
                         " with firstbyte: %u returned| tmem_pcd_copy_to_client *** \n",
                         firstbyte);
@@ -890,6 +901,8 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
 		{
                         if(pcd->currently == DISASSOCIATING)
                         {
+	                        if(can_show(pcd_remote_associate))
+                                {
                                 pr_info("matched pcd is DISASSOCIATING "
                                         "pcd_remote_associate\n");
                                 pr_info(" pcd->currently: %d, pcd->status: %d,"
@@ -897,6 +910,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                         "pcd_remote_associate ***\n", 
                                         pcd->currently, pcd->status,
                                         pcd->firstbyte);
+                                }
 
                                 goto remoteassocfail; 
                         }
@@ -1007,6 +1021,8 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                 }
                                 else
                                 {
+	                                if(can_show(pcd_remote_associate))
+                                        {
                                         pr_info(" *** mtp | making"
                                                 " pcd->currently ="
                                                 " ASSOCIATING|"
@@ -1017,6 +1033,7 @@ int pcd_remote_associate(struct page *remote_page, uint64_t *id)
                                                 "pcd_remote_associate ***\n", 
                                                 pcd->currently, pcd->status,
                                                 pcd->firstbyte);
+                                        }
                                         pcd->currently = ASSOCIATING;
                                 }
 
@@ -1164,12 +1181,15 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
 		{
                         if(pcd->currently == DISASSOCIATING)
                         {
+	                        if(can_debug(pcd_associate))
+                                {
                                 pr_info("matched pcd is DISASSOCIATING "
                                         "pcd_associate\n");
                                 pr_info(" pcd->currently: %d, pcd->status: %d,"
                                         " pcd->firstbyte: %u"
                                         "pcd_associate ***\n", pcd->currently,
                                         pcd->status, pcd->firstbyte);
+                                }
 
                                 goto assocfailed;
                         }
@@ -1227,6 +1247,8 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                         } 
                         else
                         {
+	                        if(can_debug(pcd_associate))
+                                {
                                 pr_info(" *** mtp | making pcd->currently ="
                                         " ASSOCIATING| pcd_associate ***\n");
 
@@ -1234,6 +1256,7 @@ int pcd_associate(struct tmem_page_descriptor* pgp, uint32_t csize)
                                         " pcd->firstbyte: %u"
                                         "pcd_associate ***\n", pcd->currently,
                                         pcd->status, pcd->firstbyte);
+                                }
 
                                 pcd->currently = ASSOCIATING;
                         }

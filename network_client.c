@@ -682,7 +682,7 @@ snd_page_wait:
 	}
 	else                                                              
 	{                                                                  
-		//if(can_show(tcp_client_snd_page))
+		if(can_show(tcp_client_snd_page))
 		pr_info(" *** mtp | client RECV:PAGE to %s FAILED | "
 			"tcp_client_snd_page ***\n", rs->rs_ip);
 

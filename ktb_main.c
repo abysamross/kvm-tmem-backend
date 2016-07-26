@@ -100,6 +100,7 @@ int debug_ktb_remotify_puts = 0;
 int debug_pcd_add_to_remote_tree = 0;
 int debug_tmem_pcd_status_update = 0;
 int debug_ktb_remote_get = 0;
+int debug_tmem_remotified_copy_to_client = 0;
 
 int show_msg_ktb_new_pool = 0;
 int show_msg_ktb_destroy_pool = 0;
@@ -127,6 +128,7 @@ int show_msg_ktb_remotify_puts = 0;
 int show_msg_pcd_add_to_remote_tree = 0;
 int show_msg_tmem_pcd_status_update = 0;
 int show_msg_ktb_remote_get = 0;
+int show_msg_tmem_remotified_copy_to_client = 0;
 /******************************************************************************/ 
 /*                                                       End debuggging flags */
 /******************************************************************************/ 
@@ -746,12 +748,14 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
         int ret = -1;
         struct remote_server *rs_tmp;
 
+        if(can_show(ktb_remotified_get_page))
         pr_info(" *** mtp | trying to get remotified page from: %s, with id:"
                 " %llu having firstbyte: %u,| ktb_remotified_get_page ***\n",
                 ip, remote_id, firstbyte);
 
         down_read(&rs_rwmutex);
         //read_lock(&rs_rwspinlock);
+        if(can_debug(ktb_remotified_get_page))
         pr_info(" *** mtp | down_read SUCC: trying to get remotified page "
                 " from: %s, with id: %llu having firstbyte: %u,|"
                 " ktb_remotified_get_page ***\n", ip, remote_id, firstbyte);
@@ -800,6 +804,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
                                 }
 
                                 up_read(&rs_rwmutex);
+                                if(can_debug(ktb_remotify_puts))
                                 pr_info(" *** mtp | up_read SUCC: trying to"
                                         " get remotified page from: %s, with"
                                         " id: %llu having firstbyte: %u,|"
@@ -814,6 +819,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
         //else
         //read_unlock(&rs_rwspinlock);
         up_read(&rs_rwmutex);
+        if(can_debug(ktb_remotify_puts))
         pr_info(" *** mtp | up_read SUCC: trying to"
                 " get remotified page from: %s, with"
                 " id: %llu having firstbyte: %u,|"
@@ -1131,7 +1137,9 @@ restartthread:
                         vaddr1 = page_address(page);
                         memset(vaddr1, 0, PAGE_SIZE);
 
-                        pr_info("new pcd address: %lx\n", (unsigned long)pcd);
+                        if(can_debug(ktb_remotify_puts))
+                                pr_info("new pcd address: %lx\n",
+                                        (unsigned long)pcd);
 
                         BUG_ON(pcd == NULL);
                         BUG_ON(pcd->system_page == NULL);
@@ -1176,11 +1184,13 @@ restartthread:
                                         (pcd->system_page == NULL)?
                                         "NULL":"NOT NULL",
                                         pcd->currently);
+
                         if((pcd->pgp->obj->oid.oid[2] == 0) && 
                            (pcd->pgp->obj->oid.oid[1] == 0) &&
                            (pcd->pgp->obj->oid.oid[0] == 272842))
                         {
                                 test_remotify++;
+                                if(can_debug(ktb_remotify_puts))
                                 pr_info(" exp1A | remotifying page"
                                         " with index: %u of object:"
                                         " %llu %llu %llu rooted at rb_tree"
@@ -1195,6 +1205,19 @@ restartthread:
                                         pcd->pgp->obj->pool->associated_client->client_id,
                                         firstbyte);
                         }
+                        else
+                        {
+                                /*
+                                 * test for simultaneous full fledged operations
+                                 * at both ends.
+                                 */
+                                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                                tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
+                                                       0, "dummyip", 0,
+                                                       &res);
+                                continue;
+                        }
+
 
                         read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                         if(can_debug(ktb_remotify_puts))
@@ -1317,6 +1340,7 @@ restartthread:
                                    (pcd->pgp->obj->oid.oid[0] == 272842))
                                 {
                                         test_remotify_succ++;
+                                        if(can_debug(ktb_remotify_puts))
                                 pr_info(" exp1B | successfully remotified page"
                                         " with index: %u of object:"
                                         " %llu %llu %llu rooted at rb_tree"
@@ -1346,6 +1370,7 @@ restartthread:
                                    (pcd->pgp->obj->oid.oid[0] == 272842))
                                 {
                                         test_remotify_fail++;
+                                        if(can_debug(ktb_remotify_puts))
                                 pr_info(" exp1C | failed to remotify page"
                                         " with index: %u of object:"
                                         " %llu %llu %llu rooted at rb_tree"
