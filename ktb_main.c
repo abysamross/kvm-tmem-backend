@@ -804,7 +804,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
                                 }
 
                                 up_read(&rs_rwmutex);
-                                if(can_debug(ktb_remotify_puts))
+                                if(can_debug(ktb_remotified_get_page))
                                 pr_info(" *** mtp | up_read SUCC: trying to"
                                         " get remotified page from: %s, with"
                                         " id: %llu having firstbyte: %u,|"
@@ -819,7 +819,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
         //else
         //read_unlock(&rs_rwspinlock);
         up_read(&rs_rwmutex);
-        if(can_debug(ktb_remotify_puts))
+        if(can_debug(ktb_remotified_get_page))
         pr_info(" *** mtp | up_read SUCC: trying to"
                 " get remotified page from: %s, with"
                 " id: %llu having firstbyte: %u,|"
@@ -1212,6 +1212,9 @@ restartthread:
                                  * at both ends.
                                  */
                                 read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                                if(can_debug(ktb_remotify_puts))
+                                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED"
+                                                " ktb_remotify_puts \n", firstbyte);
                                 tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
                                                        0, "dummyip", 0,
                                                        &res);

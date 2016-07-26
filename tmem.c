@@ -346,6 +346,8 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 
                 pr_info("new nexpcd address: %lx\n", (unsigned long)nexpcd);
 
+                if(((unsigned long)(nexpcd)) != (unsigned long)(&(tmem_system.remote_sharing_candidate_list)))
+                {
                 pr_info("@@@@ nexpcd->firstbyte: %u, nexpcd->status: %d,"
                         " nexpcd->currently: %d, nextpcd->remote_ip: %s,"
                         " nexpcd->remote_id: %llu, nexpcd->system_page: %s"
@@ -367,6 +369,7 @@ void tmem_pcd_status_update(struct tmem_page_content_descriptor *pcd,
 			nexpcd->pgp->obj->pool->pool_id,
 			nexpcd->pgp->obj->pool->associated_client->client_id,
                         firstbyte);
+                }
                 }
         }
         /* now you may remove him from rscl */
