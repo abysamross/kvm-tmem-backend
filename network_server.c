@@ -322,6 +322,7 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 {
 	uint8_t firstbyte;
         int ret = 0, len = 49, i = 0;
+	unsigned long ktbrgetjiffies = 0;
         //char in_msg[len+1];
         char out_msg[len+1];
         //void *vaddr;
@@ -363,7 +364,9 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 			" ***\n", firstbyte, id);                           
 
 	/* look up pcd_remote_tree_roots[firstbyte] */
+	ktbrgetjiffies = jiffies;
 	ret = ktb_remote_get(new_page, firstbyte, id);
+	pr_info("jiffies:ktb_remote_get: %lu\n", (jiffies - ktbrgetjiffies));
 
         if(can_show(get_remote_page))
 		pr_info(" *** mtp | client sending response for RGET:PAGE"
@@ -432,7 +435,14 @@ rget_fail:
 
 int compare_page(struct page *new_page, uint64_t *id)
 {
-        if(pcd_remote_associate(new_page, id) < 0)
+	int ret;
+	unsigned long pcdremoassojiffies;
+
+	pcdremoassojiffies = jiffies;
+	ret = pcd_remote_associate(new_page, id);
+	pr_info("jiffies:pcd_remote_associate: %lu\n", (jiffies - pcdremoassojiffies));
+
+        if(ret < 0)
         {
                 if(can_show(compare_page))
                         pr_info(" *** mtp | page test FAILED |"
@@ -1067,13 +1077,21 @@ bfltresp:
 					 * do comparison of this page in 
 					 * the tmem bknd. Give response.
 					 */
+					int rt = 0;
 					uint64_t id;
+					unsigned long rcvcmpjiffies;
+
 					conn_data->in_buf = in_buf;
 
 					if(can_debug(connection_handler))
                                         pr_info(" ### PAGE### PAGE### PAGE### PAGE\n");
 
-					if(rcv_and_cmp_page(conn_data,&id)<0)
+					rcvcmpjiffies = jiffies;
+					ret = rcv_and_cmp_page(conn_data,&id);
+					pr_info("jiffies:rcv_and_cmp_page: %lu\n", 
+						(jiffies - rcvcmpjiffies));
+
+					if(rt < 0)
 						goto pagefail;
 
 					memset(out_buf, 0, len+1);
@@ -1092,10 +1110,16 @@ pageresp:
 			}
 			else if(memcmp(in_buf, "RGET", 4) == 0)
 			{
+				unsigned long rgetjiffies;
+
 				if(can_debug(connection_handler))
                                 pr_info(" ### RGET### RGET### RGET### RGET\n");
 				conn_data->in_buf = in_buf;
+
+				rgetjiffies = jiffies;
 				get_remote_page(conn_data);
+				pr_info("jiffies:get_remote_page: %lu\n",
+					(jiffies-rgetjiffies));
 			}
 			else if(memcmp(in_buf, "QUIT", 4) == 0)
 			{
@@ -1105,7 +1129,7 @@ pageresp:
 			}
 			/* 
                          * this is aplicable only to the thread handling connection
-			 * to the leader i
+			 * to the leader 
                          */
 			else if(memcmp(in_buf, "ADIOS", 5) == 0)
 			{

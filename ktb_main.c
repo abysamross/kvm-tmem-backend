@@ -244,7 +244,9 @@ static struct attribute_group devict_attr_group = {
 /******************************************************************************/
 int timed_fwd_filter(void* data)
 {
+		int ret;
         unsigned long jleft = 0;
+        unsigned long timedfwdjiffies = 0;
 
         struct bloom_filter *bflt = (struct bloom_filter *)data;
 
@@ -280,8 +282,12 @@ int timed_fwd_filter(void* data)
                         goto exit_timed_fwd_filter;
                 }
                 */
+				timedfwdjiffies = jiffies;
+				ret = tcp_client_fwd_filter(bflt);
+				pr_info("jiffies:timed_fwd_filter: %lu\n",
+						(jiffies - timedfwdjiffies));
 
-                if(tcp_client_fwd_filter(bflt) < 0)
+                if( ret < 0)
                 {
                         if(can_show(timed_fwd_filter))
                                 pr_info(" *** mtp | tcp_client_fwd_filter 2"
@@ -747,6 +753,7 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 {
         int ret = -1;
         struct remote_server *rs_tmp;
+		unsigned long remogetpg;
 
         if(can_show(ktb_remotified_get_page))
         pr_info(" *** mtp | trying to get remotified page from: %s, with id:"
@@ -768,6 +775,8 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 
                         if(strcmp(rs_tmp->rs_ip, ip) == 0)
                         {
+								int rr = 0;
+
                                 if(can_show(ktb_remotified_get_page))
                                         pr_info(" *** mtp | found remote server"
                                                 " info:\n | ip-> %s | port-> %d"
@@ -775,10 +784,15 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
                                                 " ***\n", rs_tmp->rs_ip,
                                                 rs_tmp->rs_port);
 
-                                if(tcp_client_no_wait_remotified_get(
-                                                                rs_tmp, page,\
-                                                                firstbyte,\
-                                                                remote_id) < 0)
+								remogetpg = jiffies;
+								rr = 
+								tcp_client_no_wait_remotified_get( rs_tmp, page,\
+                                                                  firstbyte,\
+                                                                  remote_id);
+								pr_info("jiffies:tcp_client_no_wait_remotified_get: %lu\n",
+										(jiffies - remogetpg));
+
+                                if(rr < 0)
                                 {
                                         if(can_show(ktb_remotified_get_page))
                                                 pr_info(" *** mtp | page with"
@@ -993,6 +1007,7 @@ int ktb_remotify_puts(void)
         uint64_t count = 0;
         int evict_status = 0;
         unsigned long jleft = 0;
+        unsigned long evictionjiffies = 0;
         struct tmem_page_content_descriptor *pcd = NULL;
         struct tmem_page_content_descriptor *nexpcd = NULL;
 
@@ -1045,6 +1060,7 @@ restartthread:
 
                 jleft = schedule_timeout(delaykrf*HZ);
 
+				evictionjiffies = jiffies;
                 if(can_show(ktb_remotify_puts)) 
                         pr_info(" *** mtp | Timeout Expired: %lu |"
                                         " ktb_remotify_puts ***\n", jleft);
@@ -1240,8 +1256,16 @@ restartthread:
 
                         list_for_each_entry(rs, &(rs_head), rs_list)
                         {
-                                if(bloom_filter_check(rs->rs_bflt, &firstbyte,\
-                                                      1, &bloom_res) < 0)
+								int bret = 0;
+								unsigned long bfltcheckjiffies;
+
+								bfltcheckjiffies = jiffies;
+								bret =
+								bloom_filter_check(rs->rs_bflt, &firstbyte, 1, &bloom_res);
+								pr_info("jiffies:bloom_filter_check: %lu\n",
+										(jiffies - bfltcheckjiffies));
+
+                                if(bret < 0)
                                 {
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info("*** mtp | checking for"
@@ -1252,6 +1276,9 @@ restartthread:
                                 }
                                 else if(bloom_res == true)
                                 {
+										int sret = 0;
+										unsigned long sndpagejiffies;
+
                                         if(can_show(ktb_remotify_puts))
                                                 pr_info(" *** mtp | the rscl"
                                                         " object IS PRESENT in"
@@ -1260,8 +1287,13 @@ restartthread:
                                                         " ***\n", rs->rs_ip);
 
                                         /**/
-                                        if(tcp_client_no_wait_snd_page(rs, page,\
-                                                               &remote_id) < 0 )
+										sndpagejiffies = jiffies;
+										sret = 
+										tcp_client_no_wait_snd_page(rs, page, &remote_id);
+										pr_info("jiffies:tcp_client_no_wait_snd_page: %lu\n",
+												(jiffies - sndpagejiffies));
+
+                                        if(sret < 0)
                                         {
                                                 if(can_show(ktb_remotify_puts))
                                                         pr_info("*** mtp | page"
@@ -1501,6 +1533,7 @@ skiprsiter:
 exit_remotify:
 
         ktb_eviction_thread_stopped = 1;
+	    pr_info("jiffies:ktb_remotify_puts: %lu\n", (jiffies - evictionjiffies));
         return 0;
 }
 
@@ -1583,11 +1616,11 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         if(kvm_tmem_dedup_enabled)
         {
                 int temp;
-                unsigned long pcdjiffies = 0;
+                unsigned long pcddupjiffies = 0;
 
-                pcdjiffies = jiffies;
+                pcddupjiffies = jiffies;
                 temp = pcd_associate(pgp, 0);
-                pr_info("pcd_associate: %lu\n", (jiffies - pcdjiffies));
+                pr_info("jiffies:pcd_associate: %lu\n", (jiffies - pcddupjiffies));
 
                 if(temp == -ENOMEM)
                 {
@@ -1928,7 +1961,13 @@ refind:
 
         if (kvm_tmem_dedup_enabled)
         {
-                int dedup_ret = pcd_associate(pgp, 0);
+                int dedup_ret = 0;
+				unsigned long pcdjiffies = 0;
+				
+
+				pcdjiffies = jiffies;
+				dedup_ret = pcd_associate(pgp, 0);
+                pr_info("jiffies:pcd_associate: %lu\n", (jiffies - pcdjiffies));
 
                 //if(pcd_associate(pgp, 0) == -ENOMEM)
                 //pr_info("*** mtp | dedup_ret: %d | ktb_put_page ***\n",

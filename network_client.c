@@ -708,6 +708,7 @@ int tcp_client_fwd_filter(struct bloom_filter *bflt)
         void *vaddr;
         //unsigned long off;
         int size;
+	unsigned long sndfltjiffies;
         //int i;
         //struct page *pg;
         //int pc = 0;
@@ -794,12 +795,13 @@ fwd_bflt_wait:
 
                                         //mutex_lock(&bflt->lock);
 
+					sndfltjiffies = jiffies;
                                         ret = 
                                         tcp_client_send(cli_conn_socket, vaddr,\
                                                         size, MSG_DONTWAIT, 1);
-
+					pr_info("jiffies:tcp_client_fwd_filter: %lu\n",
+						(jiffies - sndfltjiffies));
                                         //mutex_unlock(&bflt->lock);
-
                                         /*
                                         for(j = 0; j < n_pages; j++)
                                         {
@@ -811,7 +813,6 @@ fwd_bflt_wait:
                                                 tot_ret += ret;
                                         }
                                         */
-
                                         /* 
                                          * Can I assume that memory allocated
                                          * by vmalloc starts from a page
@@ -819,7 +820,6 @@ fwd_bflt_wait:
                                          * the offset within the page also, at
                                          * least for first page.
                                          */
-
                                         /* 
                                          * if you failed to send the entire bloom
                                          * filter you should inform this to

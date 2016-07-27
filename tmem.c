@@ -572,6 +572,7 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 	uint8_t firstbyte;
         int ret = -1;
 	uint64_t remote_id;
+	unsigned long remotifiedgetjiffies = 0;
         void *vaddr;
 	char *remote_ip;
         struct page *page = NULL;
@@ -646,8 +647,11 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
         pr_info(" *** mtp | getting remotified page with firstbyte: %u, ip: %s,"
                 " id: %llu | tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
+
+	remotifiedgetjiffies = jiffies;
         ret = 
 	ktb_remotified_get_page(page, remote_ip, firstbyte, remote_id); 
+	pr_info("jiffies:ktb_remotified_get_page: %lu\n", (jiffies - remotifiedgetjiffies));
 
         if(ret < 0)
                 goto free_exit_remote;
@@ -1711,6 +1715,7 @@ int tmem_copy_from_client(struct page* tmem_page, struct page* client_page)
 //		struct tmem_pool *pool)
 void tmem_pgp_free_data(struct tmem_page_descriptor *pgp)
 {
+	unsigned long pcddisjiffies = 0;
 	//uint32_t pgp_size = pgp->size;
 	if(pgp->tmem_page == NULL)
 		return;
@@ -1726,8 +1731,13 @@ void tmem_pgp_free_data(struct tmem_page_descriptor *pgp)
 			pgp->firstbyte, pgp->pcd->status, pgp->pcd->firstbyte);
 
 	if(kvm_tmem_dedup_enabled && pgp->firstbyte != NOT_SHAREABLE)
+	{
+		pcddisjiffies = jiffies;
                 pcd_disassociate(pgp,0);
+		pr_info("jiffies:pcd_disassociate: %lu\n", (jiffies - pcddisjiffies));
+
 	        //pcd_disassociate(pgp,pool,0);
+	}
 	else
 		tmem_free_page(pgp->tmem_page);
 	        //tmem_free_page(pgp->obj->pool, pgp->tmem_page);
