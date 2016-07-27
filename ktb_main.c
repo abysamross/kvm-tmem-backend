@@ -1582,7 +1582,14 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
 
         if(kvm_tmem_dedup_enabled)
         {
-                if(pcd_associate(pgp, 0) == -ENOMEM)
+                int temp;
+                unsigned long pcdjiffies = 0;
+
+                pcdjiffies = jiffies;
+                temp = pcd_associate(pgp, 0);
+                pr_info("pcd_associate: %lu\n", (jiffies - pcdjiffies));
+
+                if(temp == -ENOMEM)
                 {
                         if(can_debug(ktb_dup_put_page))
                                 pr_info(" *** mtp: %s, %s, %d | could not "
@@ -3011,8 +3018,8 @@ static void __exit ktb_main_exit(void)
 /******************************************************************************/
 /*							   END KTB MODULE EXIT*/
 /******************************************************************************/
-        module_init(ktb_main_init)
+module_init(ktb_main_init)
 module_exit(ktb_main_exit)
-        /******************************************************************************/
-        /*								END KTB MODULE*/
-        /******************************************************************************/
+/******************************************************************************/
+/*								END KTB MODULE*/
+/******************************************************************************/
