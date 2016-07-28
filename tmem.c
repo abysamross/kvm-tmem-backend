@@ -572,7 +572,8 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
 	uint8_t firstbyte;
         int ret = -1;
 	uint64_t remote_id;
-	unsigned long remotifiedgetjiffies = 0;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
         void *vaddr;
 	char *remote_ip;
         struct page *page = NULL;
@@ -648,10 +649,12 @@ int tmem_remotified_copy_to_client(struct page *client_page,\
                 " id: %llu | tmem_remotified_copy_to_client *** \n",
                 firstbyte, remote_ip, remote_id);
 
-	remotifiedgetjiffies = jiffies;
+        rdtscll(rdtscstart);
         ret = 
 	ktb_remotified_get_page(page, remote_ip, firstbyte, remote_id); 
-	pr_info("jiffies:ktb_remotified_get_page: %lu\n", (jiffies - remotifiedgetjiffies));
+        rdtscll(rdtscstop);
+        pr_info("rdtscll:ktb_remotified_get_page: %llu\n",
+                        (rdtscstop - rdtscstart));
 
         if(ret < 0)
                 goto free_exit_remote;
@@ -1368,7 +1371,7 @@ assocfailed:
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 
-	update_bflt(pcd);
+	//update_bflt(pcd);
 match:
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);
@@ -1715,7 +1718,8 @@ int tmem_copy_from_client(struct page* tmem_page, struct page* client_page)
 //		struct tmem_pool *pool)
 void tmem_pgp_free_data(struct tmem_page_descriptor *pgp)
 {
-	unsigned long pcddisjiffies = 0;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
 	//uint32_t pgp_size = pgp->size;
 	if(pgp->tmem_page == NULL)
 		return;
@@ -1732,9 +1736,11 @@ void tmem_pgp_free_data(struct tmem_page_descriptor *pgp)
 
 	if(kvm_tmem_dedup_enabled && pgp->firstbyte != NOT_SHAREABLE)
 	{
-		pcddisjiffies = jiffies;
+                rdtscll(rdtscstart);
                 pcd_disassociate(pgp,0);
-		pr_info("jiffies:pcd_disassociate: %lu\n", (jiffies - pcddisjiffies));
+                rdtscll(rdtscstop);
+                pr_info("rdtscll:pcd_disassociate: %llu\n",
+                                (rdtscstop - rdtscstart));
 
 	        //pcd_disassociate(pgp,pool,0);
 	}

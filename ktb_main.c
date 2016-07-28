@@ -59,10 +59,10 @@ struct tmem_page_content_descriptor *test_pcd;
 struct tmem_system_view tmem_system;
 
 /*
-struct rb_root pcd_tree_roots[256]; 
-rwlock_t pcd_tree_rwlocks[256]; 
-DEFINE_RWLOCK(id_rwlock);
-*/
+   struct rb_root pcd_tree_roots[256]; 
+   rwlock_t pcd_tree_rwlocks[256]; 
+   DEFINE_RWLOCK(id_rwlock);
+   */
 /******************************************************************************/ 
 /*                                                      List global variables */
 /******************************************************************************/ 
@@ -189,14 +189,14 @@ u64 failed_tmem_page_invalidates;
 /******************************************************************************/ 
 
 static ssize_t devict_read(struct kobject *kobj, struct kobj_attribute *attr,
-                           char *buf)
+                char *buf)
 {
         return sprintf(buf, "%lld\n", devict_count);
 
 }
 
 static ssize_t devict_write(struct kobject *kobj, struct kobj_attribute *attr,
-                            const char *buf, size_t count)
+                const char *buf, size_t count)
 {
         int ret;
         ret = kstrtoll(buf, 10, &devict_count);
@@ -207,14 +207,14 @@ static ssize_t devict_write(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static ssize_t dynamic_eviction_read(struct kobject *kobj, struct kobj_attribute
-                                     *attr, char *buf)
+                *attr, char *buf)
 {
         return sprintf(buf, "%d\n", dynamic_eviction);
 
 }
 
 static ssize_t dynamic_eviction_write(struct kobject *kobj, struct kobj_attribute
-                                      *attr, const char *buf, size_t count)
+                *attr, const char *buf, size_t count)
 {
         int ret;
         ret = kstrtoint(buf, 10, &dynamic_eviction);
@@ -244,9 +244,10 @@ static struct attribute_group devict_attr_group = {
 /******************************************************************************/
 int timed_fwd_filter(void* data)
 {
-		int ret;
+        int ret;
         unsigned long jleft = 0;
-        unsigned long timedfwdjiffies = 0;
+        unsigned long long rdtscstart = 0;
+        unsigned long long rdtscstop = 0;
 
         struct bloom_filter *bflt = (struct bloom_filter *)data;
 
@@ -257,48 +258,49 @@ int timed_fwd_filter(void* data)
         //set_freezable();
 
         /*
-        while(!kthread_should_stop())
-        {
-        */
-                set_current_state(TASK_INTERRUPTIBLE);
+           while(!kthread_should_stop())
+           {
+           */
+        set_current_state(TASK_INTERRUPTIBLE);
 
-                jleft = schedule_timeout(delaytff*HZ);
+        jleft = schedule_timeout(delaytff*HZ);
 
-                if(can_show(timed_fwd_filter))
-                        pr_info("*** mtp | Bloom filter transfer timer expired!"
+        if(can_show(timed_fwd_filter))
+                pr_info("*** mtp | Bloom filter transfer timer expired!"
                                 " TIMER VALUE: %lu secs | timed_fwd_filter"
                                 " *** \n", (jleft/HZ));
 
-                /*for now reset these counters
-                  tmem_remote_dedups = 0;
-                  succ_tmem_remote_dedups = 0;
-                  failed_tmem_remote_dedups = 0;
-                  */
-                //__set_current_state(TASK_RUNNING);
+        /*for now reset these counters
+          tmem_remote_dedups = 0;
+          succ_tmem_remote_dedups = 0;
+          failed_tmem_remote_dedups = 0;
+          */
+        //__set_current_state(TASK_RUNNING);
 
-                /*
-                if(signal_pending(current))
-                {
-                        goto exit_timed_fwd_filter;
-                }
-                */
-				timedfwdjiffies = jiffies;
-				ret = tcp_client_fwd_filter(bflt);
-				pr_info("jiffies:timed_fwd_filter: %lu\n",
-						(jiffies - timedfwdjiffies));
+        /*
+           if(signal_pending(current))
+           {
+           goto exit_timed_fwd_filter;
+           }
+           */
+        rdtscll(rdtscstart);
+        ret = tcp_client_fwd_filter(bflt);
+        rdtscll(rdtscstop);
+        pr_info("rdtscll:timed_fwd_filter: %llu\n",
+                (rdtscstop - rdtscstart));
 
-                if( ret < 0)
-                {
-                        if(can_show(timed_fwd_filter))
-                                pr_info(" *** mtp | tcp_client_fwd_filter 2"
+        if( ret < 0)
+        {
+                if(can_show(timed_fwd_filter))
+                        pr_info(" *** mtp | tcp_client_fwd_filter 2"
                                         " attmepts failed |"
                                         " timed_fwd_filter *** \n");
-                }
-                //remote_puts();
-                //set_current_state(TASK_INTERRUPTIBLE);
-        /*
         }
-        */
+        //remote_puts();
+        //set_current_state(TASK_INTERRUPTIBLE);
+        /*
+           }
+           */
         //__set_current_state(TASK_RUNNING);
 
 exit_timed_fwd_filter:
@@ -311,7 +313,7 @@ exit_timed_fwd_filter:
 int start_fwd_filter(struct bloom_filter *bflt)
 {
         fwd_bflt_thread = 
-        kthread_run((void *)timed_fwd_filter, (void *)bflt, "fwd_bflt");
+                kthread_run((void *)timed_fwd_filter, (void *)bflt, "fwd_bflt");
 
         if(fwd_bflt_thread == NULL)
                 return -1;
@@ -331,12 +333,12 @@ int ktb_remotify_puts(void);
 int start_eviction_thread(void)
 {
         ktb_eviction_thread = 
-        kthread_run((void *)ktb_remotify_puts, NULL, "ktb_eviction_thread");
+                kthread_run((void *)ktb_remotify_puts, NULL, "ktb_eviction_thread");
 
         if(ktb_eviction_thread == NULL)
         {
                 pr_info(" *** mtp | could not start eviction thread |"
-                        " start_eviction_thread ***\n");
+                                " start_eviction_thread ***\n");
                 return -1;
         }
 
@@ -449,8 +451,8 @@ static int ktb_destroy_client(int client_id)
         {
                 if(can_debug(ktb_destroy_client))
                         pr_info(" *** mtp: %s %s %d | No such client possible: "
-                                "%d | ktb_destroy_client *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "%d | ktb_destroy_client *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
 
                 goto out;
         }
@@ -459,9 +461,9 @@ static int ktb_destroy_client(int client_id)
         {
                 if(can_debug(ktb_destroy_client))
                         pr_info(" *** mtp: %s %s %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_destroy_client *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_destroy_client *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -480,8 +482,8 @@ static int ktb_destroy_client(int client_id)
         {
                 if(can_debug(ktb_destroy_client))
                         pr_info(" *** mtp: %s %s %d | client: %d does not have "
-                                "any valid pools | ktb_destroy_client *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "any valid pools | ktb_destroy_client *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
         }
 
         client->allocated = 0;
@@ -490,8 +492,8 @@ static int ktb_destroy_client(int client_id)
 
         if(can_show(ktb_destroy_client))
                 pr_info(" *** mtp | successfully destroyed client: %d, flushed:"
-                        " %d pools | ktb_destroy_client *** \n ",
-                        client_id, ret);
+                                " %d pools | ktb_destroy_client *** \n ",
+                                client_id, ret);
 out:
         return ret;
 }
@@ -514,8 +516,8 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_object))
                         pr_info(" *** mtp: %s %s %d | No such client possible: "
-                                "%d | ktb_flush_object*** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "%d | ktb_flush_object*** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
 
                 goto out;
         }
@@ -524,9 +526,9 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_object))
                         pr_info(" *** mtp: %s %s %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_flush_object*** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_flush_object*** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -536,8 +538,8 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_object))
                         pr_info(" *** mtp: %s %s %d | Client: %d doesn't have "
-                                "a valid POOL | ktb_flush_object*** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "a valid POOL | ktb_flush_object*** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -547,12 +549,12 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_object))
                         pr_info(" *** mtp: %s %s %d | could not find the "
-                                "object: %llu %llu %llu rooted at rb_tree "
-                                "slot: %u in pool: %u of client: %u | "
-                                "ktb_flush_object*** \n",
-                                __FILE__, __func__, __LINE__,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "object: %llu %llu %llu rooted at rb_tree "
+                                        "slot: %u in pool: %u of client: %u | "
+                                        "ktb_flush_object*** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
                 goto out;
         }
 
@@ -563,10 +565,10 @@ static unsigned long int ktb_flush_object(int client_id, int32_t pool_id, \
 
         if(can_show(ktb_flush_object))
                 pr_info(" *** mtp | successfully deleted object: %llu %llu %llu"
-                        " rooted at rb_tree slot: %u of pool: %u of client: %u "
-                        " ktb_flush_object*** \n", oidp->oid[2], oidp->oid[1],
-                        oidp->oid[0], oidp_hash, pool->pool_id,
-                        pool->associated_client->client_id);
+                                " rooted at rb_tree slot: %u of pool: %u of client: %u "
+                                " ktb_flush_object*** \n", oidp->oid[2], oidp->oid[1],
+                                oidp->oid[0], oidp_hash, pool->pool_id,
+                                pool->associated_client->client_id);
 
         succ_tmem_invalidates++;
         succ_tmem_inode_invalidates++;
@@ -599,8 +601,8 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_page))
                         pr_info(" *** mtp: %s %s %d | No such client possible: "
-                                "%d | ktb_flush_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "%d | ktb_flush_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
 
                 goto out;
         }
@@ -609,9 +611,9 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_page))
                         pr_info(" *** mtp: %s %s %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_flush_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_flush_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -623,8 +625,8 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_page))
                         pr_info(" *** mtp: %s %s %d | Client: %d doesn't have "
-                                "a valid POOL | ktb_flush_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "a valid POOL | ktb_flush_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -634,12 +636,12 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_page))
                         pr_info(" *** mtp: %s %s %d | could not find the "
-                                "object: %llu %llu %llu rooted at rb_tree "
-                                "slot: %u in pool: %u of client: %u | "
-                                "ktb_flush_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "object: %llu %llu %llu rooted at rb_tree "
+                                        "slot: %u in pool: %u of client: %u | "
+                                        "ktb_flush_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 goto out;
         }
@@ -650,12 +652,12 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_flush_page))
                         pr_info(" *** mtp: %s %s %d | could not delete page "
-                                "descriptor for page with index: %u of object: "
-                                "%llu %llu %llu rooted at rb_tree slot: %u of "
-                                "pool: %u of client: %u | ktb_flush_page *** \n",
-                                __FILE__, __func__, __LINE__, index,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "descriptor for page with index: %u of object: "
+                                        "%llu %llu %llu rooted at rb_tree slot: %u of "
+                                        "pool: %u of client: %u | ktb_flush_page *** \n",
+                                        __FILE__, __func__, __LINE__, index,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 spin_unlock(&obj->obj_spinlock);
                 goto out;
@@ -676,10 +678,10 @@ static unsigned long int ktb_flush_page(int client_id, int32_t pool_id, \
         }
         if(can_show(ktb_flush_page))
                 pr_info(" *** mtp | successfully deleted page with index: %u "
-                        "from object: %llu %llu %llu rooted at rb_tree slot: %u"
-                        " of pool: %u of client: %u | ktb_flush_page *** \n",
-                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "from object: %llu %llu %llu rooted at rb_tree slot: %u"
+                                " of pool: %u of client: %u | ktb_flush_page *** \n",
+                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         succ_tmem_invalidates++;
         succ_tmem_page_invalidates++;
@@ -699,15 +701,15 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
         void *vaddr1, *vaddr2;
         struct tmem_page_content_descriptor *pcd;
         struct radix_tree_root *root = 
-        &(tmem_system.pcd_remote_tree_roots[firstbyte]);
+                &(tmem_system.pcd_remote_tree_roots[firstbyte]);
 
         vaddr1 = page_address(page);
         memset(vaddr1, 0, PAGE_SIZE);
 
         if(can_show(ktb_remote_get))
                 pr_info(" *** mtp | Looking for remote page with remote id: %llu"
-                        " in pcd_remote_tree_roots[%u] | ktb_remote_get ***\n",
-                        id, firstbyte);
+                                " in pcd_remote_tree_roots[%u] | ktb_remote_get ***\n",
+                                id, firstbyte);
 
         read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
         read_lock(&(tmem_system.pcd_remote_tree_rwlocks[firstbyte]));
@@ -738,8 +740,8 @@ int ktb_remote_get(struct page *page, uint8_t firstbyte,\
 
         if(can_show(ktb_remote_get))
                 pr_info(" *** mtp | remote page: %llu was present in"
-                        " pcd_remote_tree_roots[%u] | ktb_remote_get ***\n", id,
-                        firstbyte);
+                                " pcd_remote_tree_roots[%u] | ktb_remote_get ***\n", id,
+                                firstbyte);
 
 rget_unlock:
 
@@ -753,19 +755,18 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 {
         int ret = -1;
         struct remote_server *rs_tmp;
-		unsigned long remogetpg;
 
         if(can_show(ktb_remotified_get_page))
-        pr_info(" *** mtp | trying to get remotified page from: %s, with id:"
-                " %llu having firstbyte: %u,| ktb_remotified_get_page ***\n",
-                ip, remote_id, firstbyte);
+                pr_info(" *** mtp | trying to get remotified page from: %s, with id:"
+                                " %llu having firstbyte: %u,| ktb_remotified_get_page ***\n",
+                                ip, remote_id, firstbyte);
 
         down_read(&rs_rwmutex);
         //read_lock(&rs_rwspinlock);
         if(can_debug(ktb_remotified_get_page))
-        pr_info(" *** mtp | down_read SUCC: trying to get remotified page "
-                " from: %s, with id: %llu having firstbyte: %u,|"
-                " ktb_remotified_get_page ***\n", ip, remote_id, firstbyte);
+                pr_info(" *** mtp | down_read SUCC: trying to get remotified page "
+                                " from: %s, with id: %llu having firstbyte: %u,|"
+                                " ktb_remotified_get_page ***\n", ip, remote_id, firstbyte);
         if(!(list_empty(&rs_head)))
         {
                 list_for_each_entry(rs_tmp, &(rs_head), rs_list)
@@ -775,55 +776,57 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
 
                         if(strcmp(rs_tmp->rs_ip, ip) == 0)
                         {
-								int rr = 0;
+                                int rr = 0;
+                                unsigned long long rdtscstart;
+                                unsigned long long rdtscstop;
 
                                 if(can_show(ktb_remotified_get_page))
                                         pr_info(" *** mtp | found remote server"
-                                                " info:\n | ip-> %s | port-> %d"
-                                                " | ktb_remotified_get_page"
-                                                " ***\n", rs_tmp->rs_ip,
-                                                rs_tmp->rs_port);
+                                                        " info:\n | ip-> %s | port-> %d"
+                                                        " | ktb_remotified_get_page"
+                                                        " ***\n", rs_tmp->rs_ip,
+                                                        rs_tmp->rs_port);
 
-								remogetpg = jiffies;
-								rr = 
-								tcp_client_no_wait_remotified_get( rs_tmp, page,\
-                                                                  firstbyte,\
-                                                                  remote_id);
-								pr_info("jiffies:tcp_client_no_wait_remotified_get: %lu\n",
-										(jiffies - remogetpg));
+                                rdtscll(rdtscstart);
+                                rr = 
+                                tcp_client_no_wait_remotified_get(rs_tmp,page,\
+                                                firstbyte,remote_id);
+                                rdtscll(rdtscstop);
+                                pr_info("rdtscll:tcp_client_no_wait_remotified_"
+                                        "get %llu\n", (rdtscstop - rdtscstart));
 
                                 if(rr < 0)
                                 {
                                         if(can_show(ktb_remotified_get_page))
                                                 pr_info(" *** mtp | page with"
-                                                        " firsbyte:" " %u,"
-                                                        " remote id: %llu was"
-                                                        " NOT FOUND with RS: %s"
-                                                        " | ktb_remotified_get_"
-                                                        " page ***\n", 
-                                                        firstbyte, remote_id,
-                                                        rs_tmp->rs_ip);
+                                                                " firsbyte:" " %u,"
+                                                                " remote id: %llu was"
+                                                                " NOT FOUND with RS: %s"
+                                                                " | ktb_remotified_get_"
+                                                                " page ***\n", 
+                                                                firstbyte, remote_id,
+                                                                rs_tmp->rs_ip);
                                 }
                                 else
                                 {
                                         ret = 0;
                                         if(can_show(ktb_remotified_get_page))
                                                 pr_info(" *** mtp | page with"
-                                                        " firsbyte: %u, remote"
-                                                        " id: %llu was FOUND"
-                                                        " with RS: %s | ktb_"
-                                                        " remotified_get_page"
-                                                        " ***\n", firstbyte,
-                                                       remote_id,rs_tmp->rs_ip);
+                                                                " firsbyte: %u, remote"
+                                                                " id: %llu was FOUND"
+                                                                " with RS: %s | ktb_"
+                                                                " remotified_get_page"
+                                                                " ***\n", firstbyte,
+                                                                remote_id,rs_tmp->rs_ip);
                                 }
 
                                 up_read(&rs_rwmutex);
                                 if(can_debug(ktb_remotified_get_page))
-                                pr_info(" *** mtp | up_read SUCC: trying to"
-                                        " get remotified page from: %s, with"
-                                        " id: %llu having firstbyte: %u,|"
-                                        " ktb_remotified_get_page ***\n", ip,
-                                        remote_id, firstbyte);
+                                        pr_info(" *** mtp | up_read SUCC: trying to"
+                                                        " get remotified page from: %s, with"
+                                                        " id: %llu having firstbyte: %u,|"
+                                                        " ktb_remotified_get_page ***\n", ip,
+                                                        remote_id, firstbyte);
                                 return ret;
                         }
                         //read_lock(&rs_rwspinlock);
@@ -834,11 +837,11 @@ int ktb_remotified_get_page(struct page *page, char *ip, uint8_t firstbyte,
         //read_unlock(&rs_rwspinlock);
         up_read(&rs_rwmutex);
         if(can_debug(ktb_remotified_get_page))
-        pr_info(" *** mtp | up_read SUCC: trying to"
-                " get remotified page from: %s, with"
-                " id: %llu having firstbyte: %u,|"
-                " ktb_remotified_get_page ***\n", ip,
-                remote_id, firstbyte);
+                pr_info(" *** mtp | up_read SUCC: trying to"
+                                " get remotified page from: %s, with"
+                                " id: %llu having firstbyte: %u,|"
+                                " ktb_remotified_get_page ***\n", ip,
+                                remote_id, firstbyte);
         return ret;
 }
 
@@ -861,8 +864,8 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | No such client possible: "
-                                "%d | ktb_get_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "%d | ktb_get_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -870,9 +873,9 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_get_page *** \n ",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_get_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
@@ -884,18 +887,18 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s, %s, %d | Client: %d doesn't have"
-                                " a valid POOL | ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__, client_id);
+                                        " a valid POOL | ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__, client_id);
                 goto out;
         }
 
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | Searching for object: %llu %llu %llu at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n",
-                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n",
+                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         obj = tmem_obj_find(pool,oidp);
 
@@ -903,18 +906,18 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s, %s, %d | object: %llu %llu %llu"
-                                " does not exist | ktb_get_page*** \n",
-                                __FILE__, __func__, __LINE__,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0]);
+                                        " does not exist | ktb_get_page*** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0]);
                 goto out;
         }
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | object: %llu %llu %llu found at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n",
-                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n",
+                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         ASSERT_SPINLOCK(&obj->obj_spinlock);
         pgp = tmem_pgp_delete_from_obj(obj, index);
@@ -923,12 +926,12 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | could not delete ktb pgp "
-                                "for index: %u, object: %llu %llu %llu, rooted "
-                                "at rb_tree slot: %u of pool: %u of client: %u "
-                                "| ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__, index,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "for index: %u, object: %llu %llu %llu, rooted "
+                                        "at rb_tree slot: %u of pool: %u of client: %u "
+                                        "| ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__, index,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 spin_unlock(&obj->obj_spinlock);
                 goto out;
@@ -950,11 +953,11 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | copied contents of index: %u, object: "
-                        "%llu %llu %llu having firstbyte: %u, rooted at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_get_page *** \n", index, oidp->oid[2], oidp->oid[1],
-                        oidp->oid[0], pgp->firstbyte, oidp_hash, pool->pool_id,
-                        client->client_id);
+                                "%llu %llu %llu having firstbyte: %u, rooted at "
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_get_page *** \n", index, oidp->oid[2], oidp->oid[1],
+                                oidp->oid[0], pgp->firstbyte, oidp_hash, pool->pool_id,
+                                client->client_id);
 
         tmem_pgp_delist_free(pgp);
         //tmem_pgp_free(pgp);
@@ -976,20 +979,20 @@ static unsigned long int ktb_get_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_get_page))
                         pr_info(" *** mtp: %s %s %d | Index: %u, Object:  "
-                                " %llu %llu %llu rooted at rb_tree slot: %u of "
-                                "pool: %u of client: %u destroyed | "
-                                "ktb_get_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        " %llu %llu %llu rooted at rb_tree slot: %u of "
+                                        "pool: %u of client: %u destroyed | "
+                                        "ktb_get_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
         }
 
         if(can_show(ktb_get_page))
                 pr_info(" *** mtp | Successfully served page at index: %u, "
-                        "object: %llu %llu %llu rooted at rb_tree slot: %u of "
-                        "pool: %u of client: %u | ktb_get_page *** \n",
-                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "object: %llu %llu %llu rooted at rb_tree slot: %u of "
+                                "pool: %u of client: %u | ktb_get_page *** \n",
+                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         succ_tmem_gets++;
         return 0;
@@ -1007,7 +1010,8 @@ int ktb_remotify_puts(void)
         uint64_t count = 0;
         int evict_status = 0;
         unsigned long jleft = 0;
-        unsigned long evictionjiffies = 0;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
         struct tmem_page_content_descriptor *pcd = NULL;
         struct tmem_page_content_descriptor *nexpcd = NULL;
 
@@ -1048,149 +1052,150 @@ int ktb_remotify_puts(void)
         /*
 restartthread:
 
-        while(!kthread_should_stop())
-        {
+while(!kthread_should_stop())
+{
+*/
+        /*
+           pr_info(" *** mtp | eviction thread firing |"
+           " ktb_remotify_puts ***\n");
+           */
+
+        set_current_state(TASK_INTERRUPTIBLE);
+
+        jleft = schedule_timeout(delaykrf*HZ);
+
+        rdtscll(rdtscstart);
+
+        if(can_show(ktb_remotify_puts)) 
+                pr_info(" *** mtp | Timeout Expired: %lu |"
+                                " ktb_remotify_puts ***\n", jleft);
+
+        //__set_current_state(TASK_RUNNING);
+
+        /*
+           if(signal_pending(current))
+           goto exit_remotify;
+           */
+
+        /*
+           if((dynamic_eviction == 1) && (devict_count != 0))
+           {
+           evict_status = 2;
+           */
+        /*
+         * if dynamic eviction count > system_unique_pages we
+         * would like to limit it to system_unique_pages. But is
+         * system_unique_pages > REDUCE_SYS_PAGES_BY then limit
+         * dynamic eviction count to REDUCE_SYS_PAGES_BY as we
+         * want to avoid too many evictions from keeping the
+         * eviction thread busy using up cpu.
+         */
+        /*
+           if(devict_count >= system_unique_pages)
+           {
+        //devict_count = system_unique_pages;
+        (system_unique_pages >= REDUCE_SYS_PAGES_BY)?\
+        (devict_count = REDUCE_SYS_PAGES_BY):
+        (devict_count = system_unique_pages);
+        }
+        }
         */
-                /*
-                   pr_info(" *** mtp | eviction thread firing |"
-                   " ktb_remotify_puts ***\n");
-                   */
+        /*
+           else if(static_eviction && (system_unique_pages>=MAX_SYS_PAGES))
+           {
+           */
+        /*
+         * for all other settings like:
+         * - dynamic eviction being enabled but devict_count=0
+         *   and system_unique_pages going above MAX_SYS_PAGES 
+         * - dynamic eviction not set and system_unique_pages
+         *   going above MAX_SYS_PAGES static eviction kicks in.
+         *   as static eviction is always set.
+         */
+        /*
+           evict_status = 1;
+           sevict_count = REDUCE_SYS_PAGES_BY;
+           }
+           else
+           {
+           goto restartthread;
+           }
+           */
 
-                set_current_state(TASK_INTERRUPTIBLE);
+        //read_lock(&(tmem_system.system_list_rwlock));
+        write_lock(&(tmem_system.system_list_rwlock));
+        if(can_debug(ktb_remotify_puts))
+                pr_info("system_list_rwlock LOCKED ktb_remotify_puts\n");
 
-                jleft = schedule_timeout(delaykrf*HZ);
-
-				evictionjiffies = jiffies;
-                if(can_show(ktb_remotify_puts)) 
-                        pr_info(" *** mtp | Timeout Expired: %lu |"
-                                        " ktb_remotify_puts ***\n", jleft);
-
-                //__set_current_state(TASK_RUNNING);
-
-                /*
-                if(signal_pending(current))
-                        goto exit_remotify;
-                */
-
-                /*
-                if((dynamic_eviction == 1) && (devict_count != 0))
-                {
-                        evict_status = 2;
-                */
-                        /*
-                         * if dynamic eviction count > system_unique_pages we
-                         * would like to limit it to system_unique_pages. But is
-                         * system_unique_pages > REDUCE_SYS_PAGES_BY then limit
-                         * dynamic eviction count to REDUCE_SYS_PAGES_BY as we
-                         * want to avoid too many evictions from keeping the
-                         * eviction thread busy using up cpu.
-                         */
-                /*
-                        if(devict_count >= system_unique_pages)
-                        {
-                                //devict_count = system_unique_pages;
-                                (system_unique_pages >= REDUCE_SYS_PAGES_BY)?\
-                                (devict_count = REDUCE_SYS_PAGES_BY):
-                                (devict_count = system_unique_pages);
-                        }
-                }
-                */
-                /*
-                else if(static_eviction && (system_unique_pages>=MAX_SYS_PAGES))
-                {
-                */
-                        /*
-                         * for all other settings like:
-                         * - dynamic eviction being enabled but devict_count=0
-                         *   and system_unique_pages going above MAX_SYS_PAGES 
-                         * - dynamic eviction not set and system_unique_pages
-                         *   going above MAX_SYS_PAGES static eviction kicks in.
-                         *   as static eviction is always set.
-                         */
-                /*
-                        evict_status = 1;
-                        sevict_count = REDUCE_SYS_PAGES_BY;
-                }
-                else
-                {
-                        goto restartthread;
-                }
-                */
-
-                //read_lock(&(tmem_system.system_list_rwlock));
-                write_lock(&(tmem_system.system_list_rwlock));
+        if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
+        {
+                //read_unlock(&(tmem_system.system_list_rwlock));
+                write_unlock(&(tmem_system.system_list_rwlock));
                 if(can_debug(ktb_remotify_puts))
-                       pr_info("system_list_rwlock LOCKED ktb_remotify_puts\n");
-
-                if(list_empty(&(tmem_system.remote_sharing_candidate_list)))
-                {
-                        //read_unlock(&(tmem_system.system_list_rwlock));
-                        write_unlock(&(tmem_system.system_list_rwlock));
-                        if(can_debug(ktb_remotify_puts))
-                                pr_info(" system_list_rwlock UNLOCKED"
+                        pr_info(" system_list_rwlock UNLOCKED"
                                         " ktb_remotify_puts \n");
-                        /*
-                        goto restartthread;
-                        */
-                        goto exit_remotify;
-                }
+                /*
+                   goto restartthread;
+                   */
+                goto exit_remotify;
+        }
 
-                list_for_each_entry_safe(pcd, nexpcd,\
-                                &(tmem_system.remote_sharing_candidate_list),\
-                                system_rscl_pcds)
-                {
-                        bool bloom_res;
-                        bool res = false;
-                        uint8_t firstbyte;
-                        struct remote_server *rs;
-                        struct page *page = alloc_page(GFP_ATOMIC);
-                        void *vaddr1, *vaddr2;
-                        uint64_t remote_id;
+        list_for_each_entry_safe(pcd, nexpcd,\
+                        &(tmem_system.remote_sharing_candidate_list),\
+                        system_rscl_pcds)
+        {
+                bool bloom_res;
+                bool res = false;
+                uint8_t firstbyte;
+                struct remote_server *rs;
+                struct page *page = alloc_page(GFP_ATOMIC);
+                void *vaddr1, *vaddr2;
+                uint64_t remote_id;
 
-                        count++;
-                        tmem_remotify_puts++;
+                count++;
+                tmem_remotify_puts++;
 
-                        vaddr1 = page_address(page);
-                        memset(vaddr1, 0, PAGE_SIZE);
+                vaddr1 = page_address(page);
+                memset(vaddr1, 0, PAGE_SIZE);
 
-                        if(can_debug(ktb_remotify_puts))
-                                pr_info("new pcd address: %lx\n",
+                if(can_debug(ktb_remotify_puts))
+                        pr_info("new pcd address: %lx\n",
                                         (unsigned long)pcd);
 
-                        BUG_ON(pcd == NULL);
-                        BUG_ON(pcd->system_page == NULL);
+                BUG_ON(pcd == NULL);
+                BUG_ON(pcd->system_page == NULL);
 
-                        firstbyte = tmem_get_first_byte(pcd->system_page);
+                firstbyte = tmem_get_first_byte(pcd->system_page);
 
-                        /*
-                           if(pcd->currently == DISASSOCIATING)
-                           {
-                           write_unlock(&(tmem_system.system_list_rwlock));
-                           continue;
-                           }
-                           else
-                        */
-                        /*
-                         * to protect this pcd from deleted.
-                         */
-                        pcd->currently = REMOTIFYING;
+                /*
+                   if(pcd->currently == DISASSOCIATING)
+                   {
+                   write_unlock(&(tmem_system.system_list_rwlock));
+                   continue;
+                   }
+                   else
+                   */
+                /*
+                 * to protect this pcd from deleted.
+                 */
+                pcd->currently = REMOTIFYING;
 
-                        //read_unlock(&(tmem_system.system_list_rwlock));
-                        write_unlock(&(tmem_system.system_list_rwlock));
-                        if(can_debug(ktb_remotify_puts))
-                                pr_info("system_list_rwlock UNLOCKED"
+                //read_unlock(&(tmem_system.system_list_rwlock));
+                write_unlock(&(tmem_system.system_list_rwlock));
+                if(can_debug(ktb_remotify_puts))
+                        pr_info("system_list_rwlock UNLOCKED"
                                         " ktb_remotify_puts \n");
 
-                        read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-                        if(can_debug(ktb_remotify_puts))
-                                pr_info("pcd_tree_rwlocks[%u] LOCKED"
+                read_lock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                if(can_debug(ktb_remotify_puts))
+                        pr_info("pcd_tree_rwlocks[%u] LOCKED"
                                         " ktb_remotify_puts \n", firstbyte);
 
-                        vaddr2 = page_address(pcd->system_page);
-                        memcpy(vaddr1, vaddr2, PAGE_SIZE);
+                vaddr2 = page_address(pcd->system_page);
+                memcpy(vaddr1, vaddr2, PAGE_SIZE);
 
-                        if(can_debug(ktb_remotify_puts))
-                                pr_info(" *** mtp | details of pcd to be"
+                if(can_debug(ktb_remotify_puts))
+                        pr_info(" *** mtp | details of pcd to be"
                                         " remotified. firstbyte: %u, status:%d,"
                                         " remote_ip: %s, remote_id: %llu,"
                                         " sys_page: %s, currently: %d|"
@@ -1201,114 +1206,118 @@ restartthread:
                                         "NULL":"NOT NULL",
                                         pcd->currently);
 
-                        if((pcd->pgp->obj->oid.oid[2] == 0) && 
-                           (pcd->pgp->obj->oid.oid[1] == 0) &&
-                           (pcd->pgp->obj->oid.oid[0] == 272842))
-                        {
-                                test_remotify++;
-                                if(can_debug(ktb_remotify_puts))
+                if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                                (pcd->pgp->obj->oid.oid[1] == 0) &&
+                                (pcd->pgp->obj->oid.oid[0] == 272842))
+                {
+                        test_remotify++;
+                        if(can_debug(ktb_remotify_puts))
                                 pr_info(" exp1A | remotifying page"
-                                        " with index: %u of object:"
-                                        " %llu %llu %llu rooted at rb_tree"
-                                        " slot: %u of pool: %u of"
-                                        " client: %u, having firstbyte: %u"
-                                        " | *** \n", pcd->pgp->index,
-                                        pcd->pgp->obj->oid.oid[2],
-                                        pcd->pgp->obj->oid.oid[1],
-                                        pcd->pgp->obj->oid.oid[0],
-                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
-                                        pcd->pgp->obj->pool->pool_id,
-                                        pcd->pgp->obj->pool->associated_client->client_id,
-                                        firstbyte);
-                        }
-                        else
-                        {
-                                /*
-                                 * test for simultaneous full fledged operations
-                                 * at both ends.
-                                 */
-                                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
-                                if(can_debug(ktb_remotify_puts))
-                                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED"
-                                                " ktb_remotify_puts \n", firstbyte);
-                                tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
-                                                       0, "dummyip", 0,
-                                                       &res);
-                                goto skiprsiter;
-                        }
-
-
+                                                " with index: %u of object:"
+                                                " %llu %llu %llu rooted at rb_tree"
+                                                " slot: %u of pool: %u of"
+                                                " client: %u, having firstbyte: %u"
+                                                " | *** \n", pcd->pgp->index,
+                                                pcd->pgp->obj->oid.oid[2],
+                                                pcd->pgp->obj->oid.oid[1],
+                                                pcd->pgp->obj->oid.oid[0],
+                                                tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                                pcd->pgp->obj->pool->pool_id,
+                                                pcd->pgp->obj->pool->associated_client->client_id,
+                                                firstbyte);
+                }
+                else
+                {
+                        /*
+                         * test for simultaneous full fledged operations
+                         * at both ends.
+                         */
                         read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
                         if(can_debug(ktb_remotify_puts))
                                 pr_info("pcd_tree_rwlocks[%u] UNLOCKED"
+                                                " ktb_remotify_puts \n", firstbyte);
+                        tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
+                                        0, "dummyip", 0,
+                                        &res);
+                        goto skiprsiter;
+                }
+
+
+                read_unlock(&(tmem_system.pcd_tree_rwlocks[firstbyte]));
+                if(can_debug(ktb_remotify_puts))
+                        pr_info("pcd_tree_rwlocks[%u] UNLOCKED"
                                         " ktb_remotify_puts \n", firstbyte);
 
-                        //read_lock(&rs_rwspinlock);
-                        down_read(&rs_rwmutex);
-                        if((list_empty(&rs_head)))
+                //read_lock(&rs_rwspinlock);
+                down_read(&rs_rwmutex);
+                if((list_empty(&rs_head)))
+                {
+                        up_read(&rs_rwmutex);
+                        /*
+                           goto restartthread;
+                           */
+                        goto exit_remotify;
+                }
+
+                list_for_each_entry(rs, &(rs_head), rs_list)
+                {
+                        int bret = 0;
+                        unsigned long long rdtscstart;
+                        unsigned long long rdtscstop;
+
+                        rdtscll(rdtscstart);
+                        bret =
+                        bloom_filter_check(rs->rs_bflt, &firstbyte, 1,\
+                                        &bloom_res);
+                        rdtscll(rdtscstop);
+                        pr_info("rdtscll:bloom_filter_check: %llu\n",
+                                        (rdtscstop - rdtscstart));
+
+                        if(bret < 0)
                         {
-                                up_read(&rs_rwmutex);
-                                /*
-                                goto restartthread;
-                                */
-                                goto exit_remotify;
-                        }
-
-                        list_for_each_entry(rs, &(rs_head), rs_list)
-                        {
-								int bret = 0;
-								unsigned long bfltcheckjiffies;
-
-								bfltcheckjiffies = jiffies;
-								bret =
-								bloom_filter_check(rs->rs_bflt, &firstbyte, 1, &bloom_res);
-								pr_info("jiffies:bloom_filter_check: %lu\n",
-										(jiffies - bfltcheckjiffies));
-
-                                if(bret < 0)
-                                {
-                                        if(can_show(ktb_remotify_puts))
-                                                pr_info("*** mtp | checking for"
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info("*** mtp | checking for"
                                                         " rscl object in bloom"
                                                         " filter failed |"
                                                         " ktb_remotify_puts"
                                                         " *** \n");
-                                }
-                                else if(bloom_res == true)
-                                {
-										int sret = 0;
-										unsigned long sndpagejiffies;
+                        }
+                        else if(bloom_res == true)
+                        {
+                                int sret = 0;
+                                unsigned long long rdtscstart;
+                                unsigned long long rdtscstop;
 
-                                        if(can_show(ktb_remotify_puts))
-                                                pr_info(" *** mtp | the rscl"
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info(" *** mtp | the rscl"
                                                         " object IS PRESENT in"
                                                         " BFLT of RS: %s |"
                                                         " ktb_remotify_puts"
                                                         " ***\n", rs->rs_ip);
 
-                                        /**/
-										sndpagejiffies = jiffies;
-										sret = 
-										tcp_client_no_wait_snd_page(rs, page, &remote_id);
-										pr_info("jiffies:tcp_client_no_wait_snd_page: %lu\n",
-												(jiffies - sndpagejiffies));
-
-                                        if(sret < 0)
-                                        {
-                                                if(can_show(ktb_remotify_puts))
-                                                        pr_info("*** mtp | page"
+                                rdtscll(rdtscstart);
+                                sret = 
+                                tcp_client_no_wait_snd_page(rs, page, &remote_id);
+                                rdtscll(rdtscstop);
+                                pr_info("rdtscll:tcp_client_no_wait_snd_page: %llu\n",
+                                        (rdtscstop - rdtscstart));
+                                /**/
+                                if(sret < 0)
+                                {
+                                        if(can_show(ktb_remotify_puts))
+                                                pr_info("*** mtp | page"
                                                                 " was NOT FOUND"
                                                                 " at RS:%s bflt"
                                                                 " | ktb_remotif"
                                                                 "y_puts ***\n", 
                                                                 rs->rs_ip); 
 
-                                        }
-                                        else
-                                        {
-                                                //succ_count++;
-                                                if(can_show(ktb_remotify_puts))
-                                                        pr_info("*** mtp | page"
+                                }
+                                else
+                                {
+                                        //succ_count++;
+                                        if(can_show(ktb_remotify_puts))
+                                                pr_info("*** mtp | page"
                                                                 " was FOUND at"
                                                                 " RS: %s, with"
                                                                 " ID: %llu |"
@@ -1317,224 +1326,227 @@ restartthread:
                                                                 rs->rs_ip,
                                                                 remote_id);
 
-                                               tmem_pcd_status_update
-                                               (pcd,&nexpcd,firstbyte,remote_id,
-                                                rs->rs_ip, 1, &res);
-                                               /* 
-                                                * do not touch the ptr pcd until
-                                                * the beginning of next
-                                                * iteration, as
-                                                * tmem_pcd_status_
-                                                * update could have
-                                                * disassociated this pcd.
-                                                */
-                                                if(can_debug(ktb_remotify_puts))
-                                                        pr_info("system_list_"
+                                        tmem_pcd_status_update
+                                                (pcd,&nexpcd,firstbyte,remote_id,
+                                                 rs->rs_ip, 1, &res);
+                                        /* 
+                                         * do not touch the ptr pcd until
+                                         * the beginning of next
+                                         * iteration, as
+                                         * tmem_pcd_status_
+                                         * update could have
+                                         * disassociated this pcd.
+                                         */
+                                        if(can_debug(ktb_remotify_puts))
+                                                pr_info("system_list_"
                                                                 "rwlock LOCKED "
                                                                 "ktb_remotify_"
                                                                 "puts \n");
-                                                break;
-                                        }
+                                        break;
                                 }
-                                else
-                                {
-                                        if(can_show(ktb_remotify_puts))
-                                                pr_info(" *** mtp | the rscl"
+                        }
+                        else
+                        {
+                                if(can_show(ktb_remotify_puts))
+                                        pr_info(" *** mtp | the rscl"
                                                         " object is NOT PRESENT"
                                                         " in BFLT of RS: %s | "
                                                         "ktb_remotify_puts***\n"
                                                         ,rs->rs_ip);
-                                }
+                        }
 
-                                tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
-                                                       remote_id, rs->rs_ip, 0,
-                                                       &res);
+                        tmem_pcd_status_update(pcd, &nexpcd, firstbyte,
+                                        remote_id, rs->rs_ip, 0,
+                                        &res);
 
-                                if(can_debug(ktb_remotify_puts))
-                                        pr_info("system_list_rwlock LOCKED"
+                        if(can_debug(ktb_remotify_puts))
+                                pr_info("system_list_rwlock LOCKED"
                                                 " ktb_remotify_puts \n");
-                               /* 
-                                * do not touch the ptr pcd until
-                                * the beginning of next
-                                * iteration, as
-                                * tmem_remotified_pcd_status_
-                                * update could have
-                                * disassociated this pcd.
-                                */
-                        }
-                        up_read(&rs_rwmutex);
-skiprsiter:
-                        __free_page(page);
-
-                        if((res == true) )
-                        {
-                                succ_tmem_remotify_puts++;
-                                succ_count++;
-
-                                if((pcd->pgp->obj->oid.oid[2] == 0) && 
-                                   (pcd->pgp->obj->oid.oid[1] == 0) &&
-                                   (pcd->pgp->obj->oid.oid[0] == 272842))
-                                {
-                                        test_remotify_succ++;
-                                        if(can_debug(ktb_remotify_puts))
-                                pr_info(" exp1B | successfully remotified page"
-                                        " with index: %u of object:"
-                                        " %llu %llu %llu rooted at rb_tree"
-                                        " slot: %u of pool: %u of"
-                                        " client: %u, having firstbyte: %u"
-                                        " | *** \n", pcd->pgp->index,
-                                        pcd->pgp->obj->oid.oid[2],
-                                        pcd->pgp->obj->oid.oid[1],
-                                        pcd->pgp->obj->oid.oid[0],
-                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
-                                        pcd->pgp->obj->pool->pool_id,
-                                        pcd->pgp->obj->pool->associated_client->client_id,
-                                        firstbyte);
-                                }
-
-
-                                /*
-                                if(evict_status == 1) --sevict_count; else
-                                if(evict_status == 2) --devict_count;
-                                */
-                        } 
-                        else 
-                        { 
-                                failed_tmem_remotify_puts++; 
-                                if((pcd->pgp->obj->oid.oid[2] == 0) && 
-                                   (pcd->pgp->obj->oid.oid[1] == 0) &&
-                                   (pcd->pgp->obj->oid.oid[0] == 272842))
-                                {
-                                        test_remotify_fail++;
-                                        if(can_debug(ktb_remotify_puts))
-                                pr_info(" exp1C | failed to remotify page"
-                                        " with index: %u of object:"
-                                        " %llu %llu %llu rooted at rb_tree"
-                                        " slot: %u of pool: %u of"
-                                        " client: %u, having firstbyte: %u"
-                                        " | *** \n", pcd->pgp->index,
-                                        pcd->pgp->obj->oid.oid[2],
-                                        pcd->pgp->obj->oid.oid[1],
-                                        pcd->pgp->obj->oid.oid[0],
-                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
-                                        pcd->pgp->obj->pool->pool_id,
-                                        pcd->pgp->obj->pool->associated_client->client_id,
-                                        firstbyte);
-                                }
-                        }
-                        /*
-                        NOTE: this is now being done from within the
-                        tmem_remotified_pcd_status_update() function itself else
-                        {
-                                 * hack_safe_nexpcd:3 to ensure that nexpcd
-                                 * points to a valid pcd I need to leave it
-                                 * locked and update the nexpcd as many pcd
-                                 * could have been removed from the list by
-                                 * pcd_disassociate()
-                                write_lock(&(tmem_system.system_list_rwlock));
-                                list_safe_reset_next(pcd, nexpcd,\
-                                system_rscl_pcds);
-                                if(can_debug(ktb_remotify_puts))
-                                pr_info("system_list_rwlock LOCKED" "
-                                ktb_remotify_puts \n"); }
-                        */
-                        if(can_show(ktb_remotify_puts)) { 
-                                pr_info(" *** mtp | #unique system pages: %llu,"
-                                        " dynamic_eviction enabled: %s,"
-                                        " dynamic_evict_count: %lld,"
-                                        " static_evict_count: %lld |"
-                                        " ktb_remotify_puts *** \n",
-                                        system_unique_pages,
-                                        dynamic_eviction?"yes":"no",
-                                        devict_count, sevict_count);
-
-                                pr_info(" *** mtp | #remote lookups: %llu|"
-                                        " ktb_remotify_puts *** \n", count); 
-
-                                pr_info(" *** mtp | remote lookups succeeded:"
-                                        " %llu| ktb_remotify_puts *** \n",
-                                        succ_count);
-                        }
-
-                        if(kthread_should_stop())
-                        {
-                                /*
-                                 * hack_safe_nexpcd:4
-                                 * to ensure that nexpcd points to a valid pcd I
-                                 * had left it locked
-                                 */
-                                write_unlock(&(tmem_system.system_list_rwlock));
-                                if(can_debug(ktb_remotify_puts))
-                                        pr_info("system_list_rwlock UNLOCKED"
-                                                " ktb_remotify_puts \n");
-                                ktb_eviction_thread_stopped = 1;
-                                return 0;
-                        }
-
-                        /*
-                        if(evict_status == 1)
-                        {
-                                if(sevict_count <= 0)
-                                {
-                                        sevict_count = 0;
-                                        evict_status = 0;
-                        */
-                                        /*
-                                         * hack_safe_nexpcd:5 to ensure that
-                                         * nexpcd points to a valid pcd I had
-                                         * left it locked
-                                         */
-                        /*
-                                        write_unlock(&\
-                                        (tmem_system.system_list_rwlock));
-                                        if(can_debug(ktb_remotify_puts))
-                                                pr_info("system_list_rwlock"
-                                                        " UNLOCKED"
-                                                        " ktb_remotify_puts\n");
-                                        goto restartthread;
-                                }
-                        }
-                        */
-                        /*
-                        else if(evict_status == 2)
-                        {
-                                if(devict_count <= 0)
-                                {
-                                        devict_count = 0;
-                                        evict_status = 0;
-                        */
-                                        /*
-                                         * hack_safe_nexpcd:6 to ensure that
-                                         * nexpcd points to a valid pcd I had
-                                         * left it locked
-                                         */
-                        /*
-                                        write_unlock(&\
-                                        (tmem_system.system_list_rwlock));
-                                        pr_info("system_list_rwlock UNLOCKED"
-                                                " ktb_remotify_puts \n");
-                                        goto restartthread;
-                                }
-                        }
-                        */
-                        //read_lock(&(tmem_system.system_list_rwlock));
-                        //write_lock(&(tmem_system.system_list_rwlock));
-                        //smp_mb();
+                        /* 
+                         * do not touch the ptr pcd until
+                         * the beginning of next
+                         * iteration, as
+                         * tmem_remotified_pcd_status_
+                         * update could have
+                         * disassociated this pcd.
+                         */
                 }
-                //read_unlock(&(tmem_system.system_list_rwlock));
-                write_unlock(&(tmem_system.system_list_rwlock));
-                if(can_debug(ktb_remotify_puts))
-                        pr_info("system_list_rwlock UNLOCKED"
-                                " ktb_remotify_puts \n");
+                up_read(&rs_rwmutex);
+skiprsiter:
+                __free_page(page);
+
+                if((res == true) )
+                {
+                        succ_tmem_remotify_puts++;
+                        succ_count++;
+
+                        if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                                        (pcd->pgp->obj->oid.oid[1] == 0) &&
+                                        (pcd->pgp->obj->oid.oid[0] == 272842))
+                        {
+                                test_remotify_succ++;
+                                if(can_debug(ktb_remotify_puts))
+                                        pr_info(" exp1B | successfully remotified page"
+                                                        " with index: %u of object:"
+                                                        " %llu %llu %llu rooted at rb_tree"
+                                                        " slot: %u of pool: %u of"
+                                                        " client: %u, having firstbyte: %u"
+                                                        " | *** \n", pcd->pgp->index,
+                                                        pcd->pgp->obj->oid.oid[2],
+                                                        pcd->pgp->obj->oid.oid[1],
+                                                        pcd->pgp->obj->oid.oid[0],
+                                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                                        pcd->pgp->obj->pool->pool_id,
+                                                        pcd->pgp->obj->pool->associated_client->client_id,
+                                                        firstbyte);
+                        }
+
+
+                        /*
+                           if(evict_status == 1) --sevict_count; else
+                           if(evict_status == 2) --devict_count;
+                           */
+                } 
+                else 
+                { 
+                        failed_tmem_remotify_puts++; 
+                        if((pcd->pgp->obj->oid.oid[2] == 0) && 
+                                        (pcd->pgp->obj->oid.oid[1] == 0) &&
+                                        (pcd->pgp->obj->oid.oid[0] == 272842))
+                        {
+                                test_remotify_fail++;
+                                if(can_debug(ktb_remotify_puts))
+                                        pr_info(" exp1C | failed to remotify page"
+                                                        " with index: %u of object:"
+                                                        " %llu %llu %llu rooted at rb_tree"
+                                                        " slot: %u of pool: %u of"
+                                                        " client: %u, having firstbyte: %u"
+                                                        " | *** \n", pcd->pgp->index,
+                                                        pcd->pgp->obj->oid.oid[2],
+                                                        pcd->pgp->obj->oid.oid[1],
+                                                        pcd->pgp->obj->oid.oid[0],
+                                                        tmem_oid_hash(&(pcd->pgp->obj->oid)),
+                                                        pcd->pgp->obj->pool->pool_id,
+                                                        pcd->pgp->obj->pool->associated_client->client_id,
+                                                        firstbyte);
+                        }
+                }
                 /*
-        }
-        */
+NOTE: this is now being done from within the
+tmem_remotified_pcd_status_update() function itself else
+{
+                 * hack_safe_nexpcd:3 to ensure that nexpcd
+                 * points to a valid pcd I need to leave it
+                 * locked and update the nexpcd as many pcd
+                 * could have been removed from the list by
+                 * pcd_disassociate()
+                 write_lock(&(tmem_system.system_list_rwlock));
+                 list_safe_reset_next(pcd, nexpcd,\
+                 system_rscl_pcds);
+                 if(can_debug(ktb_remotify_puts))
+                 pr_info("system_list_rwlock LOCKED" "
+                 ktb_remotify_puts \n"); }
+                 */
+if(can_show(ktb_remotify_puts)) { 
+        pr_info(" *** mtp | #unique system pages: %llu,"
+                        " dynamic_eviction enabled: %s,"
+                        " dynamic_evict_count: %lld,"
+                        " static_evict_count: %lld |"
+                        " ktb_remotify_puts *** \n",
+                        system_unique_pages,
+                        dynamic_eviction?"yes":"no",
+                        devict_count, sevict_count);
+
+        pr_info(" *** mtp | #remote lookups: %llu|"
+                        " ktb_remotify_puts *** \n", count); 
+
+        pr_info(" *** mtp | remote lookups succeeded:"
+                        " %llu| ktb_remotify_puts *** \n",
+                        succ_count);
+}
+
+if(kthread_should_stop())
+{
+        /*
+         * hack_safe_nexpcd:4
+         * to ensure that nexpcd points to a valid pcd I
+         * had left it locked
+         */
+        write_unlock(&(tmem_system.system_list_rwlock));
+        if(can_debug(ktb_remotify_puts))
+                pr_info("system_list_rwlock UNLOCKED"
+                                " ktb_remotify_puts \n");
+        ktb_eviction_thread_stopped = 1;
+        return 0;
+}
+
+/*
+   if(evict_status == 1)
+   {
+   if(sevict_count <= 0)
+   {
+   sevict_count = 0;
+   evict_status = 0;
+   */
+/*
+ * hack_safe_nexpcd:5 to ensure that
+ * nexpcd points to a valid pcd I had
+ * left it locked
+ */
+/*
+   write_unlock(&\
+   (tmem_system.system_list_rwlock));
+   if(can_debug(ktb_remotify_puts))
+   pr_info("system_list_rwlock"
+   " UNLOCKED"
+   " ktb_remotify_puts\n");
+   goto restartthread;
+   }
+   }
+   */
+/*
+   else if(evict_status == 2)
+   {
+   if(devict_count <= 0)
+   {
+   devict_count = 0;
+   evict_status = 0;
+   */
+/*
+ * hack_safe_nexpcd:6 to ensure that
+ * nexpcd points to a valid pcd I had
+ * left it locked
+ */
+/*
+   write_unlock(&\
+   (tmem_system.system_list_rwlock));
+   pr_info("system_list_rwlock UNLOCKED"
+   " ktb_remotify_puts \n");
+   goto restartthread;
+   }
+   }
+   */
+//read_lock(&(tmem_system.system_list_rwlock));
+//write_lock(&(tmem_system.system_list_rwlock));
+//smp_mb();
+}
+//read_unlock(&(tmem_system.system_list_rwlock));
+write_unlock(&(tmem_system.system_list_rwlock));
+if(can_debug(ktb_remotify_puts))
+        pr_info("system_list_rwlock UNLOCKED"
+                        " ktb_remotify_puts \n");
+        /*
+           }
+           */
         //__set_current_state(TASK_RUNNING);
 exit_remotify:
 
-        ktb_eviction_thread_stopped = 1;
-	    pr_info("jiffies:ktb_remotify_puts: %lu\n", (jiffies - evictionjiffies));
-        return 0;
+ktb_eviction_thread_stopped = 1;
+
+rdtscll(rdtscstop);
+pr_info("rdtscll:ktb_remotify_puts: %llu\n",
+                (rdtscstop - rdtscstart));
+return 0;
 }
 
 static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
@@ -1566,10 +1578,10 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         //copy_uncompressed:
         if(can_show(ktb_dup_put_page))
                 pr_info(" *** mtp | Page with index: %u, object: %llu %llu %llu"
-                        " already exists in pool: %u of client: %u | "
-                        "ktb_dup_put_page *** \n",
-                        pgp->index, obj->oid.oid[2], obj->oid.oid[1],
-                        obj->oid.oid[0], pool->pool_id, client->client_id);
+                                " already exists in pool: %u of client: %u | "
+                                "ktb_dup_put_page *** \n",
+                                pgp->index, obj->oid.oid[2], obj->oid.oid[1],
+                                obj->oid.oid[0], pool->pool_id, client->client_id);
 
         if(pgp->tmem_page)
                 tmem_pgp_free_data(pgp);
@@ -1583,13 +1595,13 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         {
                 if(can_debug(ktb_dup_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not add page "
-                                "descriptor for " "index: %u, object: %llu %llu"
-                                "%llu of pool: %u of " "client: %u into the "
-                                "object | ktb_dup_put_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                pgp->index, obj->oid.oid[2], obj->oid.oid[1],
-                                obj->oid.oid[0], pool->pool_id,
-                                client->client_id);
+                                        "descriptor for " "index: %u, object: %llu %llu"
+                                        "%llu of pool: %u of " "client: %u into the "
+                                        "object | ktb_dup_put_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        pgp->index, obj->oid.oid[2], obj->oid.oid[1],
+                                        obj->oid.oid[0], pool->pool_id,
+                                        client->client_id);
                 fail = 0;
                 goto failed_dup;
         }
@@ -1602,13 +1614,13 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         {
                 if(can_debug(ktb_dup_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not copy contents"
-                                " of page with index: %u, object: %llu %llu "
-                                "%llu of pool: %u of client: %u | "
-                                "ktb_dup_put_page *** \n",
-                                __FILE__, __func__, __LINE__, pgp->index,
-                                obj->oid.oid[2], obj->oid.oid[1],
-                                obj->oid.oid[0], pool->pool_id,
-                                client->client_id);
+                                        " of page with index: %u, object: %llu %llu "
+                                        "%llu of pool: %u of client: %u | "
+                                        "ktb_dup_put_page *** \n",
+                                        __FILE__, __func__, __LINE__, pgp->index,
+                                        obj->oid.oid[2], obj->oid.oid[1],
+                                        obj->oid.oid[0], pool->pool_id,
+                                        client->client_id);
                 fail = 0;
                 goto bad_copy;
         }
@@ -1616,25 +1628,28 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         if(kvm_tmem_dedup_enabled)
         {
                 int temp;
-                unsigned long pcddupjiffies = 0;
+                unsigned long long rdtscstart;
+                unsigned long long rdtscstop;
 
-                pcddupjiffies = jiffies;
+                rdtscll(rdtscstart);
                 temp = pcd_associate(pgp, 0);
-                pr_info("jiffies:pcd_associate: %lu\n", (jiffies - pcddupjiffies));
+                rdtscll(rdtscstop);
+                pr_info("rdtscll:pcd_associate: %llu\n",
+                        (rdtscstop - rdtscstart));
 
                 if(temp == -ENOMEM)
                 {
                         if(can_debug(ktb_dup_put_page))
                                 pr_info(" *** mtp: %s, %s, %d | could not "
-                                        "associate page descriptor of index: "
-                                        "%u, object: %llu %llu %llu of pool: "
-                                        "%u of client: %u with any existing "
-                                        "descriptor | ktb_dup_put_page *** \n",
-                                        __FILE__, __func__, __LINE__,
-                                        pgp->index,
-                                        obj->oid.oid[2],obj->oid.oid[1],
-                                        obj->oid.oid[0], pool->pool_id,
-                                        client->client_id); fail = 0;
+                                                "associate page descriptor of index: "
+                                                "%u, object: %llu %llu %llu of pool: "
+                                                "%u of client: %u with any existing "
+                                                "descriptor | ktb_dup_put_page *** \n",
+                                                __FILE__, __func__, __LINE__,
+                                                pgp->index,
+                                                obj->oid.oid[2],obj->oid.oid[1],
+                                                obj->oid.oid[0], pool->pool_id,
+                                                client->client_id); fail = 0;
 
                         goto failed_dup;
                 }
@@ -1645,10 +1660,10 @@ static int ktb_dup_put_page(struct tmem_page_descriptor *pgp,\
         spin_unlock(&obj->obj_spinlock);
         if(can_show(ktb_dup_put_page))
                 pr_info(" *** mtp | successfully inserted page with index: %u, "
-                        "of object: %llu %llu %llu in pool: %u of client: %u | "
-                        "ktb_dup_put_page *** \n",
-                        pgp->index, obj->oid.oid[2], obj->oid.oid[1],
-                        obj->oid.oid[0], pool->pool_id, client->client_id);
+                                "of object: %llu %llu %llu in pool: %u of client: %u | "
+                                "ktb_dup_put_page *** \n",
+                                pgp->index, obj->oid.oid[2], obj->oid.oid[1],
+                                obj->oid.oid[0], pool->pool_id, client->client_id);
 
         succ_tmem_puts++;
         return 0;
@@ -1708,8 +1723,8 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | No such client possible"
-                                " : %d | ktb_put_page *** \n ",
-                                __FILE__, __func__, __LINE__, client->client_id);
+                                        " : %d | ktb_put_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client->client_id);
                 goto out;
         }
 
@@ -1717,9 +1732,9 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_put_page *** \n ",
-                                __FILE__, __func__, __LINE__, client->client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_put_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client->client_id);
 
                 goto out;
         }
@@ -1732,8 +1747,8 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | Client: %d doesn't have"
-                                " a valid POOL | ktb_put_page *** \n ",
-                                __FILE__, __func__, __LINE__, client->client_id);
+                                        " a valid POOL | ktb_put_page *** \n ",
+                                        __FILE__, __func__, __LINE__, client->client_id);
 
                 goto out;
         }
@@ -1741,10 +1756,10 @@ static unsigned long int ktb_put_page(int client_id, int32_t pool_id, \
 
         if(can_show(ktb_put_page))
                 pr_info(" *** mtp | Searching for object: %llu %llu %llu at "
-                        "rb_tree slot: %u of pool: %u of client: %u | "
-                        "ktb_put_page *** \n",
-                        oidp->oid[2], oidp->oid[1], oidp->oid[0], oidp_hash,
-                        pool->pool_id, client->client_id);
+                                "rb_tree slot: %u of pool: %u of client: %u | "
+                                "ktb_put_page *** \n",
+                                oidp->oid[2], oidp->oid[1], oidp->oid[0], oidp_hash,
+                                pool->pool_id, client->client_id);
 
 refind:
 
@@ -1758,11 +1773,11 @@ refind:
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s %s %d | Object: %llu %llu %llu "
-                                "already exists at rb_tree slot: %u of pool: %u"
-                                " of client: %u | ktb_put_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "already exists at rb_tree slot: %u of pool: %u"
+                                        " of client: %u | ktb_put_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 pgp = tmem_pgp_lookup_in_obj(obj, index);
 
@@ -1776,12 +1791,12 @@ refind:
                 {
                         if(can_show(ktb_put_page))
                                 pr_info(" *** mtp | Object: %llu %llu %llu "
-                                        "already exists at rb_tree slot: %u of "
-                                        "pool: %u of client: %u | but index: %u"
-                                        " is new | ktb_put_page *** \n",
-                                        oidp->oid[2], oidp->oid[1],
-                                        oidp->oid[0], oidp_hash, pool->pool_id,
-                                        client->client_id, index);
+                                                "already exists at rb_tree slot: %u of "
+                                                "pool: %u of client: %u | but index: %u"
+                                                " is new | ktb_put_page *** \n",
+                                                oidp->oid[2], oidp->oid[1],
+                                                oidp->oid[0], oidp_hash, pool->pool_id,
+                                                client->client_id, index);
 
                         //no puts allowed into a frozen pool (except dup puts)
                         //no idea what a frozen pool is
@@ -1793,10 +1808,10 @@ refind:
         {
                 if(can_show(ktb_put_page))
                         pr_info(" *** mtp | Object: %llu %llu %llu does not "
-                                "exist at rb_tree slot: %u of pool: %u of "
-                                "client: %u | ktb_put_page *** \n",
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "exist at rb_tree slot: %u of pool: %u of "
+                                        "client: %u | ktb_put_page *** \n",
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 obj = tmem_obj_alloc(pool, oidp);
                 //if(obj = tmem_obj_alloc(pool, oidp) == NULL)
@@ -1807,10 +1822,10 @@ refind:
                         //atomic_dec(&client->refcount);
                         if(can_debug(ktb_put_page))
                                 pr_info(" *** mtp: %s, %s, %d | failed to "
-                                        "allocate new object: %llu %llu %llu | "
-                                        "ktb_put_page *** \n", __FILE__,
-                                        __func__, __LINE__, oidp->oid[2],
-                                        oidp->oid[1], oidp->oid[0]);
+                                                "allocate new object: %llu %llu %llu | "
+                                                "ktb_put_page *** \n", __FILE__,
+                                                __func__, __LINE__, oidp->oid[2],
+                                                oidp->oid[1], oidp->oid[0]);
 
                         goto out;
                         //return -1;
@@ -1830,12 +1845,12 @@ refind:
                         // kfree(obj);
                         if(can_show(ktb_put_page))
                                 pr_info(" *** mtp | Object: %llu %llu %llu "
-                                        "inserted by parallel caller at rb_tree"
-                                        " slot: %u of pool: %u of client: %u "
-                                        "| ktb_put_page *** \n",
-                                        oidp->oid[2], oidp->oid[1],
-                                        oidp->oid[0], oidp_hash,
-                                        pool->pool_id, client->client_id);
+                                                "inserted by parallel caller at rb_tree"
+                                                " slot: %u of pool: %u of client: %u "
+                                                "| ktb_put_page *** \n",
+                                                oidp->oid[2], oidp->oid[1],
+                                                oidp->oid[0], oidp_hash,
+                                                pool->pool_id, client->client_id);
 
                         kmem_cache_free(tmem_objects_cachep, obj);
                         write_unlock(&pool->pool_rwlock);
@@ -1851,10 +1866,10 @@ refind:
 
                 if(can_show(ktb_put_page))
                         pr_info(" *** mtp | successfully inserted new object: "
-                                "%llu %llu %llu into rb_tree  root at slot: %u "
-                                "of pool: %u of client: %u | ktb_put_page ***\n",
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "%llu %llu %llu into rb_tree  root at slot: %u "
+                                        "of pool: %u of client: %u | ktb_put_page ***\n",
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
         }
 
         ASSERT_SPINLOCK(&obj->obj_spinlock);
@@ -1869,12 +1884,12 @@ refind:
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not allocate "
-                                "tmem pgp for index: %u, object: %llu %llu %llu"
-                                " rooted rb_tree slot: %u of pool: %u of "
-                                "client: %u | ktb_put_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "tmem pgp for index: %u, object: %llu %llu %llu"
+                                        " rooted rb_tree slot: %u of pool: %u of "
+                                        "client: %u | ktb_put_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 goto unlock_obj;
         }
@@ -1886,12 +1901,12 @@ refind:
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not add tmem pgp "
-                                "for index: %u, object: %llu %llu %llu rooted "
-                                "at rb_tree slot: %u of pool: %u of client: %u "
-                                "into the object | ktb_put_page *** \n",
-                                __FILE__, __func__, __LINE__, index,
-                                oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "for index: %u, object: %llu %llu %llu rooted "
+                                        "at rb_tree slot: %u of pool: %u of client: %u "
+                                        "into the object | ktb_put_page *** \n",
+                                        __FILE__, __func__, __LINE__, index,
+                                        oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 test = 0;
                 goto free_pgp;
@@ -1928,13 +1943,13 @@ refind:
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not add page "
-                                "descriptor for index: %u, object: %llu %llu "
-                                "%llu rooted at rb_tree slot: %u of pool: %u "
-                                "of client: %u into the object | "
-                                "ktb_put_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        "descriptor for index: %u, object: %llu %llu "
+                                        "%llu rooted at rb_tree slot: %u of pool: %u "
+                                        "of client: %u into the object | "
+                                        "ktb_put_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 ret = -ENOMEM;
                 test = 0;
@@ -1948,12 +1963,12 @@ refind:
         {
                 if(can_debug(ktb_put_page))
                         pr_info(" *** mtp: %s, %s, %d | could not copy contents"
-                                " of page with index: %u, object: %llu %llu "
-                                "%llu rooted at rb_tree slot: %u of pool: %u "
-                                "of client: %u | ktb_put_page *** \n",
-                                __FILE__, __func__, __LINE__,
-                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                                oidp_hash, pool->pool_id, client->client_id);
+                                        " of page with index: %u, object: %llu %llu "
+                                        "%llu rooted at rb_tree slot: %u of pool: %u "
+                                        "of client: %u | ktb_put_page *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                        oidp_hash, pool->pool_id, client->client_id);
 
                 test = 0;
                 goto bad_copy;
@@ -1962,12 +1977,14 @@ refind:
         if (kvm_tmem_dedup_enabled)
         {
                 int dedup_ret = 0;
-				unsigned long pcdjiffies = 0;
-				
+                unsigned long long rdtscstart;
+                unsigned long long rdtscstop;
 
-				pcdjiffies = jiffies;
-				dedup_ret = pcd_associate(pgp, 0);
-                pr_info("jiffies:pcd_associate: %lu\n", (jiffies - pcdjiffies));
+                rdtscll(rdtscstart);
+                dedup_ret = pcd_associate(pgp, 0);
+                rdtscll(rdtscstop);
+                pr_info("rdtscll:pcd_associate: %llu\n",
+                        (rdtscstop - rdtscstart));
 
                 //if(pcd_associate(pgp, 0) == -ENOMEM)
                 //pr_info("*** mtp | dedup_ret: %d | ktb_put_page ***\n",
@@ -1982,15 +1999,15 @@ refind:
                 {
                         if(can_debug(ktb_put_page))
                                 pr_info(" *** mtp: %s, %s, %d | could'nt "
-                                        "associate page descriptor of index: "
-                                        "%u, object: %llu %llu %llu rooted at "
-                                        "rb_tree slot: %u of pool: %u of "
-                                        "client: %u with any existing "
-                                        "descriptor | ktb_put_page *** \n",
-                                        __FILE__, __func__, __LINE__, index,
-                                        oidp->oid[2], oidp->oid[1],
-                                        oidp->oid[0], oidp_hash,
-                                        pool->pool_id, client->client_id);
+                                                "associate page descriptor of index: "
+                                                "%u, object: %llu %llu %llu rooted at "
+                                                "rb_tree slot: %u of pool: %u of "
+                                                "client: %u with any existing "
+                                                "descriptor | ktb_put_page *** \n",
+                                                __FILE__, __func__, __LINE__, index,
+                                                oidp->oid[2], oidp->oid[1],
+                                                oidp->oid[0], oidp_hash,
+                                                pool->pool_id, client->client_id);
 
                         test = 0;
                         ret = -ENOMEM;
@@ -2038,7 +2055,7 @@ refind:
                 write_lock(&(tmem_system.system_list_rwlock));
 
                 list_add_tail(&(pgp->pcd->system_rscl_pcds),\
-                              &(tmem_system.remote_sharing_candidate_list));
+                                &(tmem_system.remote_sharing_candidate_list));
 
                 write_unlock(&(tmem_system.system_list_rwlock));
                 //spin_unlock(&(tmem_system.system_list_lock));
@@ -2060,10 +2077,10 @@ refind:
         spin_unlock(&obj->obj_spinlock);
         if(can_show(ktb_put_page))
                 pr_info(" *** mtp | successfully inserted page with index: %u, "
-                        "of object: %llu %llu %llu at rb_tree slot: %u of pool:"
-                        "  %u of client: %u | ktb_put_page *** \n",
-                        index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
-                        oidp_hash, pool->pool_id, client->client_id);
+                                "of object: %llu %llu %llu at rb_tree slot: %u of pool:"
+                                "  %u of client: %u | ktb_put_page *** \n",
+                                index, oidp->oid[2], oidp->oid[1], oidp->oid[0],
+                                oidp_hash, pool->pool_id, client->client_id);
 
         succ_tmem_puts++;
         return 0;
@@ -2120,9 +2137,9 @@ static unsigned long int ktb_destroy_pool(int client_id, uint32_t pool_id)
         {
                 if(can_debug(ktb_destroy_pool))
                         pr_info(" *** mtp: %s, %s, %d | No such client "
-                                "possible: %d | ktb_destroy_pool *** \n ",
-                                __FILE__, __func__, __LINE__,
-                                client->client_id);
+                                        "possible: %d | ktb_destroy_pool *** \n ",
+                                        __FILE__, __func__, __LINE__,
+                                        client->client_id);
 
                 goto out;
         }
@@ -2131,10 +2148,10 @@ static unsigned long int ktb_destroy_pool(int client_id, uint32_t pool_id)
         {
                 if(can_debug(ktb_destroy_pool))
                         pr_info(" *** mtp: %s, %s, %d | First time client: %d "
-                                "doing something other than NEW_POOL| "
-                                "ktb_destroy_pool *** \n ",
-                                __FILE__, __func__, __LINE__,
-                                client->client_id);
+                                        "doing something other than NEW_POOL| "
+                                        "ktb_destroy_pool *** \n ",
+                                        __FILE__, __func__, __LINE__,
+                                        client->client_id);
 
                 goto out;
         }
@@ -2147,9 +2164,9 @@ static unsigned long int ktb_destroy_pool(int client_id, uint32_t pool_id)
         {
                 if(can_debug(ktb_destroy_pool))
                         pr_info(" *** mtp: %s, %s, %d | Client: %d doesn't have"
-                                " a valid POOL | ktb_destroy_pool *** \n ",
-                                __FILE__, __func__, __LINE__,
-                                client->client_id);
+                                        " a valid POOL | ktb_destroy_pool *** \n ",
+                                        __FILE__, __func__, __LINE__,
+                                        client->client_id);
 
                 goto out;
         }
@@ -2160,7 +2177,7 @@ static unsigned long int ktb_destroy_pool(int client_id, uint32_t pool_id)
 
         if(can_show(ktb_destroy_pool))
                 pr_info(" *** mtp | Successfully destroyed pool: %d of client: "
-                        "%d | ktb_destory_pool *** \n", pool_id, client_id);
+                                "%d | ktb_destory_pool *** \n", pool_id, client_id);
         ret = 1;
 
 out:
@@ -2251,8 +2268,8 @@ static unsigned long int ktb_new_pool(int client_id, uint64_t uuid_lo,\
         {
                 if(debug(ktb_new_pool))
                         pr_info(" *** mtp: %s, %s, %d | Invalid Client| "
-                                "ktb_new_pool *** \n",
-                                __FILE__, __func__, __LINE__);
+                                        "ktb_new_pool *** \n",
+                                        __FILE__, __func__, __LINE__);
                 goto out;
         }
         /*else*/
@@ -2266,8 +2283,8 @@ static unsigned long int ktb_new_pool(int client_id, uint64_t uuid_lo,\
         {
                 if(debug(ktb_new_pool))
                         pr_info(" *** mtp: %s, %s, %d | Pool creation failed : "
-                                "out of memory | ktb_new_pool *** \n",
-                                __FILE__, __func__, __LINE__);
+                                        "out of memory | ktb_new_pool *** \n",
+                                        __FILE__, __func__, __LINE__);
 
                 goto out;
         }
@@ -2285,10 +2302,10 @@ static unsigned long int ktb_new_pool(int client_id, uint64_t uuid_lo,\
                 //pr_info("%s\n", namestr);
                 if(debug(ktb_new_pool))
                         pr_info(" *** mtp: %s, %s, %d | Pool creation failed: "
-                                "Max pools allowed for client: %d exceeded | "
-                                "ktb_new_pool *** \n",
-                                __FILE__, __func__, __LINE__,
-                                client->client_id);
+                                        "Max pools allowed for client: %d exceeded | "
+                                        "ktb_new_pool *** \n",
+                                        __FILE__, __func__, __LINE__,
+                                        client->client_id);
 
                 kfree(pool);
                 poolid = -1;
@@ -2312,9 +2329,9 @@ static unsigned long int ktb_new_pool(int client_id, uint64_t uuid_lo,\
         /*What is namestr?? */
         //pr_info("%s\n", namestr);
         pr_info(" *** mtp | Created new %s tmem pool, id=%d, client=%d | "
-                "ktb_new_pool *** \n",
-                flags & TMEM_POOL_PERSIST ? "persistent":"ephemeral",
-                poolid, client_id);
+                        "ktb_new_pool *** \n",
+                        flags & TMEM_POOL_PERSIST ? "persistent":"ephemeral",
+                        poolid, client_id);
 
         /*Debug: Show client and pool info*/
 #if mtp_debug
@@ -2364,21 +2381,21 @@ static int __init ktb_main_init(void)
         /*
            uint8_t byte;
            bool bloom_res;
-        */
+           */
         pr_info(" *** mtp | INSERTED ********kvm_tmem_bknd******** INSERTED |"
-                " ktb_main_init *** \n");
+                        " ktb_main_init *** \n");
         /*
            BUG_ON(sizeof(struct cleancache_filekey) != sizeof(struct tmem_oid));
            pr_info(" *** MODULE | CURRENT ******** pid: %d, name: %s ********"
            " INSERTED | MODULE *** \n", current->pid, current->comm);
-        */
+           */
         pr_info(" *** mtp | kvm_tmem_bknd_enabled: %d, use_cleancache: %d |"
-                " ktb_main_init *** \n", kvm_tmem_bknd_enabled, use_cleancache);
+                        " ktb_main_init *** \n", kvm_tmem_bknd_enabled, use_cleancache);
 
         if (kvm_tmem_bknd_enabled && use_cleancache)
         {
                 pr_info(" *** mtp | Boot Parameter Working |"
-                        " ktb_main_init *** \n");
+                                " ktb_main_init *** \n");
 
                 /*
                    if(evict == 0)
@@ -2388,13 +2405,13 @@ static int __init ktb_main_init(void)
                    */
 
                 kvm_tmem_bknd_devict = 
-                kobject_create_and_add("kvm_tmem_bknd_devict", kernel_kobj);
+                        kobject_create_and_add("kvm_tmem_bknd_devict", kernel_kobj);
 
                 if(!kvm_tmem_bknd_devict)
                         goto sysfsfail;
 
                 ret = 
-                sysfs_create_group(kvm_tmem_bknd_devict, &devict_attr_group);
+                        sysfs_create_group(kvm_tmem_bknd_devict, &devict_attr_group);
 
                 if(ret)
                 {
@@ -2415,13 +2432,13 @@ sysfssucc:
                    mention size of bit_map,
                    add the hash functions to be used by the bloom etc
                    size of bit_map = 2^28 or 32 MB
-                 */
+                   */
                 tmem_system_bloom_filter = bloom_filter_new(bflt_bit_size);
 
                 if(IS_ERR(tmem_system_bloom_filter))
                 {
                         pr_info(" *** mtp | failed to allocate bloom_filter "
-                                "| ktb_main_init *** \n");
+                                        "| ktb_main_init *** \n");
 
                         tmem_system_bloom_filter = NULL;
                         //set error flag
@@ -2429,12 +2446,12 @@ sysfssucc:
                 }
                 else
                         pr_info(" *** mtp | successfully allocated bloom_filter"
-                                " | ktb_main_init *** \n");
+                                        " | ktb_main_init *** \n");
 
                 if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,"crc32c"))
                 {
                         pr_info(" *** mtp | Adding crc32c algo to bloom filter"
-                                "failed | ktb_main_init *** \n");
+                                        "failed | ktb_main_init *** \n");
 
                         vfree(tmem_system_bloom_filter);
                         tmem_system_bloom_filter = NULL;
@@ -2444,7 +2461,7 @@ sysfssucc:
                 if(bloom_filter_add_hash_alg(tmem_system_bloom_filter,"sha1"))
                 {
                         pr_info(" *** mtp | Adding sha1 algo to bloom filter"
-                                "failed | ktb_main_init *** \n");
+                                        "failed | ktb_main_init *** \n");
 
                         vfree(tmem_system_bloom_filter);
                         tmem_system_bloom_filter = NULL;
@@ -2455,16 +2472,16 @@ sysfssucc:
                         bloom_filter_reset(tmem_system_bloom_filter);
 
                 tmem_page_descriptors_cachep =
-                kmem_cache_create("ktb_page_descriptors",\
-                               sizeof(struct tmem_page_descriptor), 0, 0, NULL);
+                        kmem_cache_create("ktb_page_descriptors",\
+                                        sizeof(struct tmem_page_descriptor), 0, 0, NULL);
 
                 tmem_objects_cachep =
-                kmem_cache_create("ktb_tmem_objects",\
-                                  sizeof(struct tmem_object_root), 0, 0, NULL);
+                        kmem_cache_create("ktb_tmem_objects",\
+                                        sizeof(struct tmem_object_root), 0, 0, NULL);
 
                 tmem_page_content_desc_cachep =
-                kmem_cache_create("ktb_page_content_descriptors",\
-                       sizeof(struct tmem_page_content_descriptor), 0, 0, NULL);
+                        kmem_cache_create("ktb_page_content_descriptors",\
+                                        sizeof(struct tmem_page_content_descriptor), 0, 0, NULL);
 
                 if(kvm_tmem_dedup_enabled)
                 {
@@ -2472,19 +2489,19 @@ sysfssucc:
                         {
                                 tmem_system.pcd_tree_roots[i] = RB_ROOT;
                                 INIT_RADIX_TREE(\
-                                &(tmem_system.pcd_remote_tree_roots[i]),\
-                                GFP_KERNEL);
+                                                &(tmem_system.pcd_remote_tree_roots[i]),\
+                                                GFP_KERNEL);
                                 //tmem_system.pcd_remotified_tree_roots[i] = 
                                 //RADIX_TREE_INIT(GFP_KERNEL);
                                 rwlock_init(&(tmem_system.pcd_tree_rwlocks[i]));
                                 rwlock_init(\
-                                &(tmem_system.pcd_remote_tree_rwlocks[i]));
+                                                &(tmem_system.pcd_remote_tree_rwlocks[i]));
                                 //rwlock_init(
                                 //&(tmem_system.pcd_remotified_tree_rwlocks[i]));
                         }
 
                         INIT_LIST_HEAD(\
-                        &(tmem_system.remote_sharing_candidate_list));
+                                        &(tmem_system.remote_sharing_candidate_list));
                         INIT_LIST_HEAD(&(tmem_system.local_only_list));
                         INIT_LIST_HEAD(&(tmem_system.remote_shared_list));
 
@@ -2544,67 +2561,66 @@ sysfssucc:
                 kvm_host_tmem_register_ops(&ktb_ops);
 
                 pr_info(" *** mtp | Cleancache enabled using: %s | "
-                        "ktb_main_init *** \n", s);
-        /*
+                                "ktb_main_init *** \n", s);
+                /*
                    tmem_object_nodes_cachep =
                    kmem_cache_create("ktb_object_nodes",
                    sizeof(struct tmem_object_node), 0, 0, NULL);
 
                    ktb_new_client(TMEM_CLIENT);
                    */
+                /*
                 //start the tcp server
                 if(tmem_system_bloom_filter != NULL)
                 {
                         if(network_server_init() != 0)
                         {
                                 pr_info(" *** mtp | failed to start the tcp"
-                                        " server | ktb_main_init *** \n");
+                                                " server | ktb_main_init *** \n");
                                 //set error flag
                                 //goto netfail;
                         }
-                        /*
-                           register the tcp server with the designated leader,
-                           who is hard coded for now.
-                           */
+                           //register the tcp server with the designated leader,
+                           //who is hard coded for now.
                         else if(tcp_client_init() != 0)
                         {
                                 int ret;
                                 pr_info(" *** mtp | failed to register with the"
-                                        " leader server | ktb_main_init ***\n");
+                                                " leader server | ktb_main_init ***\n");
                                 if(tcp_acceptor_started && !tcp_acceptor_stopped)
                                 {
                                         ret = 
-                                        kthread_stop(tcp_server->accept_thread);
+                                                kthread_stop(tcp_server->accept_thread);
 
                                         if(!ret)
                                                 pr_info(" *** mtp | stopping"
-                                                        " tcp server accept "
-                                                        "thread as local client"
-                                                        " could not setup a"
-                                                        " connection with"
-                                                        " leader server |"
-                                                        " ktb_main_init"
-                                                        " *** \n");
-                        }
-                        if(tcp_listener_started && !tcp_listener_stopped)
-                        { 
-                                ret = kthread_stop(tcp_server->thread);
-                                if(!ret)
-                                        pr_info(" *** mtp | stopping"
-                                                " tcp server listening"
-                                                " thread as local"
-                                                " client could not"
-                                                " setup a connection"
-                                                " with leader server"
-                                                " | ktb_main_init"
-                                                " *** \n");
-
-                                if(tcp_server->listen_socket != NULL)
-                                {
-                                        sock_release(tcp_server->listen_socket);
-                                        tcp_server->listen_socket=NULL;
+                                                                " tcp server accept "
+                                                                "thread as local client"
+                                                                " could not setup a"
+                                                                " connection with"
+                                                                " leader server |"
+                                                                " ktb_main_init"
+                                                                " *** \n");
                                 }
-                        }
+                                if(tcp_listener_started && !tcp_listener_stopped)
+                                { 
+                                        ret = kthread_stop(tcp_server->thread);
+                                        if(!ret)
+                                                pr_info(" *** mtp | stopping"
+                                                                " tcp server listening"
+                                                                " thread as local"
+                                                                " client could not"
+                                                                " setup a connection"
+                                                                " with leader server"
+                                                                " | ktb_main_init"
+                                                                " *** \n");
+
+                                        if(tcp_server->listen_socket != NULL)
+                                        {
+                                                sock_release(tcp_server->listen_socket);
+                                                tcp_server->listen_socket=NULL;
+                                        }
+                                }
 
                                 kfree(tcp_conn_handler);
                                 kfree(tcp_server);
@@ -2615,24 +2631,22 @@ sysfssucc:
                         //else if(start_fwd_filter(tmem_system_bloom_filter)<0)
                         else
                         {
-                                /*
-                                   pr_info(" *** mtp | network server unable to"
-                                   " start timed_fwd_bflt_thread |"
-                                   " ktb_main_init *** \n");
-                                //vfree(tmem_system_bloom_filter);
-                                */
+                                   //pr_info(" *** mtp | network server unable to"
+                                   //" start timed_fwd_bflt_thread |"
+                                   //" ktb_main_init *** \n");
                                 if(start_eviction_thread() < 0)
                                         pr_info("***mtp | network server unable"
-                                                " to start ktb_eviction_thread|"
-                                                " ktb_main_init *** \n");
+                                                        " to start ktb_eviction_thread|"
+                                                        " ktb_main_init *** \n");
 
                                 if(start_fwd_filter(tmem_system_bloom_filter) < 0)
                                         pr_info("***mtp | network server unable"
-                                               " to start timed_fwd_bflt_thread"
-                                                " | ktb_main_init *** \n");
+                                                        " to start timed_fwd_bflt_thread"
+                                                        " | ktb_main_init *** \n");
 
                         }
                 }
+                */
         }
 
         /*
@@ -2646,81 +2660,81 @@ sysfssucc:
                 debugfs_create_u64("puts", S_IRUGO, root, &tmem_puts);
                 debugfs_create_u64("puts_succ", S_IRUGO, root, &succ_tmem_puts);
                 debugfs_create_u64("puts_failed", S_IRUGO, root,\
-                                   &failed_tmem_puts);
+                                &failed_tmem_puts);
 
                 debugfs_create_u64("remotify_puts", S_IRUGO, root,\
-                                   &tmem_remotify_puts);
+                                &tmem_remotify_puts);
                 debugfs_create_u64("remotify_puts_succ", S_IRUGO, root,\
-                                   &succ_tmem_remotify_puts);
+                                &succ_tmem_remotify_puts);
                 debugfs_create_u64("remotify_puts_failed", S_IRUGO, root,\
-                                   &failed_tmem_remotify_puts);
+                                &failed_tmem_remotify_puts);
 
                 debugfs_create_u64("gets", S_IRUGO, root, &tmem_gets);
                 debugfs_create_u64("gets_succ", S_IRUGO, root, &succ_tmem_gets);
                 debugfs_create_u64("gets_failed", S_IRUGO, root,\
-                                   &failed_tmem_gets);
+                                &failed_tmem_gets);
 
                 debugfs_create_u64("remotified_gets", S_IRUGO, root,\
-                                   &tmem_remotified_gets);
+                                &tmem_remotified_gets);
                 debugfs_create_u64("remotified_gets_succ", S_IRUGO, root,\
-                                   &succ_tmem_remotified_gets);
+                                &succ_tmem_remotified_gets);
                 debugfs_create_u64("remotified_gets_failed", S_IRUGO, root,\
-                                   &failed_tmem_remotified_gets);
+                                &failed_tmem_remotified_gets);
 
                 debugfs_create_u64("gets_from_remote", S_IRUGO, root,\
-                                   &gets_from_remote);
+                                &gets_from_remote);
                 debugfs_create_u64("gets_from_remote_succ", S_IRUGO, root,\
-                                   &succ_gets_from_remote);
+                                &succ_gets_from_remote);
                 debugfs_create_u64("gets_from_remote_failed", S_IRUGO, root,\
-                                   &failed_gets_from_remote);
+                                &failed_gets_from_remote);
 
                 debugfs_create_u64("dedups", S_IRUGO, root, &tmem_dedups);
                 debugfs_create_u64("dedups_succ", S_IRUGO, root,\
-                                   &succ_tmem_dedups);
+                                &succ_tmem_dedups);
                 debugfs_create_u64("dedups_failed", S_IRUGO, root,\
-                                   &failed_tmem_dedups);
+                                &failed_tmem_dedups);
 
                 debugfs_create_u64("remote_dedups", S_IRUGO, root,\
-                                   &tmem_remote_dedups);
+                                &tmem_remote_dedups);
                 debugfs_create_u64("remote_dedups_succ", S_IRUGO, root,\
-                                   &succ_tmem_remote_dedups);
+                                &succ_tmem_remote_dedups);
                 debugfs_create_u64("remote_dedups_failed", S_IRUGO, root,\
-                                   &failed_tmem_remote_dedups);
+                                &failed_tmem_remote_dedups);
 
                 debugfs_create_u64("invalidates", S_IRUGO, root,\
-                                   &tmem_invalidates);
+                                &tmem_invalidates);
                 debugfs_create_u64("invalidates_succ", S_IRUGO, root,\
-                                   &succ_tmem_invalidates);
+                                &succ_tmem_invalidates);
                 debugfs_create_u64("invalidates_failed", S_IRUGO, root,\
-                                   &failed_tmem_invalidates);
+                                &failed_tmem_invalidates);
 
                 debugfs_create_u64("inode_invalidates", S_IRUGO, root,\
-                                   &tmem_inode_invalidates);
+                                &tmem_inode_invalidates);
                 debugfs_create_u64("inode_invalidates_succ", S_IRUGO, root,\
-                                   &succ_tmem_inode_invalidates);
+                                &succ_tmem_inode_invalidates);
                 debugfs_create_u64("inode_invalidates_failed", S_IRUGO, root,\
-                                   &failed_tmem_inode_invalidates);
+                                &failed_tmem_inode_invalidates);
 
                 debugfs_create_u64("page_invalidates", S_IRUGO, root,\
-                                   &tmem_page_invalidates);
+                                &tmem_page_invalidates);
                 debugfs_create_u64("page_invalidates_succ", S_IRUGO, root,\
-                                   &succ_tmem_page_invalidates);
+                                &succ_tmem_page_invalidates);
                 debugfs_create_u64("page_invalidates_failed", S_IRUGO, root,\
-                                   &failed_tmem_page_invalidates);
+                                &failed_tmem_page_invalidates);
 
                 debugfs_create_u64("test_remotify", S_IRUGO, root,\
-                                   &test_remotify);
+                                &test_remotify);
                 debugfs_create_u64("test_remotify_succ", S_IRUGO, root,\
-                                   &test_remotify_succ);
+                                &test_remotify_succ);
                 debugfs_create_u64("test_remotify_fail", S_IRUGO, root,\
-                                   &test_remotify_fail);
+                                &test_remotify_fail);
 
                 debugfs_create_u64("test_remotified_get", S_IRUGO, root,\
-                                   &test_remotified_get);
+                                &test_remotified_get);
                 debugfs_create_u64("test_remotified_get_succ", S_IRUGO, root,\
-                                   &test_remotified_get_succ);
+                                &test_remotified_get_succ);
                 debugfs_create_u64("test_remotified_get_fail", S_IRUGO, root,\
-                                   &test_remotified_get_fail);
+                                &test_remotified_get_fail);
         }
 #endif
         /*
@@ -2740,8 +2754,8 @@ sysfssucc:
         //----------------------------
         //en/dis-able ktb_main.c debug
         //----------------------------
-        debug(ktb_new_pool);
         /*
+        debug(ktb_new_pool);
            debug(ktb_put_page);
            debug(ktb_dup_put_page);
            debug(ktb_get_page);
@@ -2766,13 +2780,13 @@ sysfssucc:
            debug(pcd_add_to_remote_tree);
            debug(pcd_remote_associate);
            debug(timed_fwd_filter);
-           */
         debug(tmem_pcd_status_update);
         debug(pcd_disassociate);
         debug(tmem_pgp_free_data);
         debug(ktb_remotify_puts);
         debug(ktb_remotified_get_page);
         debug(ktb_remote_get);
+           */
         // end en/dis-able tmem.c debug
 
         //---------------------------
@@ -2793,8 +2807,8 @@ sysfssucc:
         //------------------------------
         // en/dis-able ktb_main.c output
         //------------------------------
-        show_msg(ktb_new_pool);
         /*
+        show_msg(ktb_new_pool);
            show_msg(ktb_put_page);
            show_msg(ktb_dup_put_page);
            show_msg(ktb_get_page);
@@ -2802,20 +2816,20 @@ sysfssucc:
            show_msg(ktb_flush_object);
            show_msg(ktb_destroy_pool);
            show_msg(ktb_destroy_client);
-           */
         show_msg(ktb_remotify_puts);
         show_msg(ktb_remotified_get_page);
         show_msg(ktb_remote_get);
+           */
         //end en/dis-able ktb_main.c output
 
         //-------------------------
         //en/dis-able tmem.c output
         //-------------------------
+        /*
         show_msg(tmem_pgp_free_data);
         show_msg(pcd_disassociate);
         show_msg(tmem_pcd_status_update);
         //show_msg(pcd_associate);
-        /*
            show_msg(pcd_remote_associate);
            show_msg(timed_fwd_filter);
            show_msg(pcd_add_to_remote_tree);
@@ -2916,8 +2930,8 @@ static void __exit ktb_main_exit(void)
 
                         if(!ret)
                                 pr_info(" *** mtp | timed forward filter thread"
-                                        " stopped: %d | ktb_main_exit *** \n",
-                                        ret);
+                                                " stopped: %d | ktb_main_exit *** \n",
+                                                ret);
 
                         if(fwd_bflt_thread != NULL)
                                 put_task_struct(fwd_bflt_thread);
@@ -2934,8 +2948,8 @@ static void __exit ktb_main_exit(void)
 
                         if(!ret)
                                 pr_info(" *** mtp | ktb eviction thread"
-                                        " stopped: %d | ktb_main_exit *** \n",
-                                        ret);
+                                                " stopped: %d | ktb_main_exit *** \n",
+                                                ret);
 
                         if(ktb_eviction_thread != NULL)
                                 put_task_struct(ktb_eviction_thread);
@@ -2948,11 +2962,11 @@ static void __exit ktb_main_exit(void)
 
                 if(bloom_filter_unref(tmem_system_bloom_filter))
                         pr_info(" *** mtp | tmem_system_bloom_filter removed"
-                                " successfully | ktb_main_exit \n");
+                                        " successfully | ktb_main_exit \n");
                 else
                         pr_info(" *** mtp | failed to remove"
-                                " tmem_system_bloom_filter"
-                                " | ktb_main_exit \n");
+                                        " tmem_system_bloom_filter"
+                                        " | ktb_main_exit \n");
         }
 
         if(tcp_server != NULL &&  tcp_server->thread != NULL)
@@ -2987,7 +3001,7 @@ static void __exit ktb_main_exit(void)
         //write_unlock(&(tmem_system.system_list_rwlock));
 
         pr_info("***mtp | RS pcds that still remained: %d | ktb_main_exit***\n",
-                count);
+                        count);
 
         count = 0;
         pos = NULL;
@@ -3014,7 +3028,7 @@ static void __exit ktb_main_exit(void)
         read_unlock(&(tmem_system.system_list_rwlock));
 
         pr_info("***mtp| LOL pcds that still remained: %d | ktb_main_exit***\n",
-                count);
+                        count);
 
         count = 0;
         pos = NULL;
@@ -3042,7 +3056,7 @@ static void __exit ktb_main_exit(void)
         read_unlock(&(tmem_system.system_list_rwlock));
 
         pr_info("***mtp| RS pcds that still remained: %d | ktb_main_exit***\n",
-                count);
+                        count);
 
         debugfs_remove_recursive(root);
 
@@ -3052,7 +3066,7 @@ static void __exit ktb_main_exit(void)
         kmem_cache_destroy(tmem_page_descriptors_cachep);
 
         pr_info(" *** mtp | REMOVED *******kvm_tmem_bknd******* REMOVED |"
-                " ktb_main_exit *** \n");
+                        " ktb_main_exit *** \n");
 }
 /******************************************************************************/
 /*							   END KTB MODULE EXIT*/

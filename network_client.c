@@ -701,14 +701,16 @@ snd_page_fail:
 int tcp_client_fwd_filter(struct bloom_filter *bflt)
 {                                                     
         int len = 49;                                              
+        int ret;
+        int size;
+        int attempts = 0;
         char in_msg[len+1];                                              
         char out_msg[len+1];                                            
-        int ret;
-        int attempts = 0;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
+
         void *vaddr;
         //unsigned long off;
-        int size;
-	unsigned long sndfltjiffies;
         //int i;
         //struct page *pg;
         //int pc = 0;
@@ -795,12 +797,14 @@ fwd_bflt_wait:
 
                                         //mutex_lock(&bflt->lock);
 
-					sndfltjiffies = jiffies;
+                                        rdtscll(rdtscstart);
                                         ret = 
                                         tcp_client_send(cli_conn_socket, vaddr,\
                                                         size, MSG_DONTWAIT, 1);
-					pr_info("jiffies:tcp_client_fwd_filter: %lu\n",
-						(jiffies - sndfltjiffies));
+                                        rdtscll(rdtscstop);
+                                        pr_info("rdtscll:tcp_client_fwd_filter:"
+                                                " %llu\n",
+                                                (rdtscstop - rdtscstart));
                                         //mutex_unlock(&bflt->lock);
                                         /*
                                         for(j = 0; j < n_pages; j++)

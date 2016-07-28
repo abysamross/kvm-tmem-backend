@@ -322,7 +322,8 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 {
 	uint8_t firstbyte;
         int ret = 0, len = 49, i = 0;
-	unsigned long ktbrgetjiffies = 0;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
         //char in_msg[len+1];
         char out_msg[len+1];
         //void *vaddr;
@@ -364,9 +365,11 @@ void get_remote_page(struct tcp_conn_handler_data *conn)
 			" ***\n", firstbyte, id);                           
 
 	/* look up pcd_remote_tree_roots[firstbyte] */
-	ktbrgetjiffies = jiffies;
+        rdtscll(rdtscstart);
 	ret = ktb_remote_get(new_page, firstbyte, id);
-	pr_info("jiffies:ktb_remote_get: %lu\n", (jiffies - ktbrgetjiffies));
+        rdtscll(rdtscstop);
+        pr_info("rdtscll:ktb_remote_get: %llu\n",
+                        (rdtscstop - rdtscstart));
 
         if(can_show(get_remote_page))
 		pr_info(" *** mtp | client sending response for RGET:PAGE"
@@ -436,11 +439,14 @@ rget_fail:
 int compare_page(struct page *new_page, uint64_t *id)
 {
 	int ret;
-	unsigned long pcdremoassojiffies;
+        unsigned long long rdtscstart;
+        unsigned long long rdtscstop;
 
-	pcdremoassojiffies = jiffies;
+        rdtscll(rdtscstart);
 	ret = pcd_remote_associate(new_page, id);
-	pr_info("jiffies:pcd_remote_associate: %lu\n", (jiffies - pcdremoassojiffies));
+        rdtscll(rdtscstop);
+        pr_info("rdtscll:pcd_remote_associate: %llu\n",
+                        (rdtscstop - rdtscstart));
 
         if(ret < 0)
         {
@@ -1079,17 +1085,19 @@ bfltresp:
 					 */
 					int rt = 0;
 					uint64_t id;
-					unsigned long rcvcmpjiffies;
+                                        unsigned long long rdtscstart;
+                                        unsigned long long rdtscstop;
 
 					conn_data->in_buf = in_buf;
 
 					if(can_debug(connection_handler))
                                         pr_info(" ### PAGE### PAGE### PAGE### PAGE\n");
 
-					rcvcmpjiffies = jiffies;
-					ret = rcv_and_cmp_page(conn_data,&id);
-					pr_info("jiffies:rcv_and_cmp_page: %lu\n", 
-						(jiffies - rcvcmpjiffies));
+                                        rdtscll(rdtscstart);
+					rt = rcv_and_cmp_page(conn_data,&id);
+                                        rdtscll(rdtscstop);
+                                        pr_info("rdtscll:rcv_and_cmp_page: %llu\n",
+                                                (rdtscstop - rdtscstart));
 
 					if(rt < 0)
 						goto pagefail;
@@ -1110,16 +1118,18 @@ pageresp:
 			}
 			else if(memcmp(in_buf, "RGET", 4) == 0)
 			{
-				unsigned long rgetjiffies;
+                                unsigned long long rdtscstart;
+                                unsigned long long rdtscstop;
 
 				if(can_debug(connection_handler))
                                 pr_info(" ### RGET### RGET### RGET### RGET\n");
 				conn_data->in_buf = in_buf;
 
-				rgetjiffies = jiffies;
+                                rdtscll(rdtscstart);
 				get_remote_page(conn_data);
-				pr_info("jiffies:get_remote_page: %lu\n",
-					(jiffies-rgetjiffies));
+                                rdtscll(rdtscstop);
+                                pr_info("rdtscll:get_remote_page: %llu\n",
+                                                (rdtscstop - rdtscstart));
 			}
 			else if(memcmp(in_buf, "QUIT", 4) == 0)
 			{
