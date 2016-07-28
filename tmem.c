@@ -1371,7 +1371,7 @@ assocfailed:
 
 	write_unlock(&(tmem_system.system_list_rwlock));
 
-	//update_bflt(pcd);
+	update_bflt(pcd);
 match:
 	pcd->pgp_ref_count++;
 	//list_add(&pgp->pcd_siblings,&pcd->pgp_list);

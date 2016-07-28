@@ -2432,6 +2432,7 @@ sysfssucc:
                    mention size of bit_map,
                    add the hash functions to be used by the bloom etc
                    size of bit_map = 2^28 or 32 MB
+                */
                 tmem_system_bloom_filter = bloom_filter_new(bflt_bit_size);
 
                 if(IS_ERR(tmem_system_bloom_filter))
@@ -2469,7 +2470,6 @@ sysfssucc:
 
                 if(tmem_system_bloom_filter != NULL)
                         bloom_filter_reset(tmem_system_bloom_filter);
-                */
 
                 tmem_page_descriptors_cachep =
                         kmem_cache_create("ktb_page_descriptors",\
@@ -2566,10 +2566,8 @@ sysfssucc:
                    tmem_object_nodes_cachep =
                    kmem_cache_create("ktb_object_nodes",
                    sizeof(struct tmem_object_node), 0, 0, NULL);
+                */
 
-                   ktb_new_client(TMEM_CLIENT);
-                   */
-                /*
                 //start the tcp server
                 if(tmem_system_bloom_filter != NULL)
                 {
@@ -2634,19 +2632,20 @@ sysfssucc:
                                    //pr_info(" *** mtp | network server unable to"
                                    //" start timed_fwd_bflt_thread |"
                                    //" ktb_main_init *** \n");
+                                /*
                                 if(start_eviction_thread() < 0)
                                         pr_info("***mtp | network server unable"
                                                         " to start ktb_eviction_thread|"
                                                         " ktb_main_init *** \n");
+                                */
 
                                 if(start_fwd_filter(tmem_system_bloom_filter) < 0)
                                         pr_info("***mtp | network server unable"
-                                                        " to start timed_fwd_bflt_thread"
-                                                        " | ktb_main_init *** \n");
+                                                " to start timed_fwd_bflt_thread"
+                                                " | ktb_main_init *** \n");
 
                         }
                 }
-                */
         }
 
         /*
@@ -2920,7 +2919,6 @@ static void __exit ktb_main_exit(void)
         if(kvm_tmem_bknd_devict)
                 kobject_put(kvm_tmem_bknd_devict);
 
-        /*
         mutex_lock(&timed_ff_mutex);
         if(fwd_bflt_thread != NULL)
         {
@@ -2975,7 +2973,6 @@ static void __exit ktb_main_exit(void)
 
         for(cli_id = 0; cli_id < MAX_CLIENTS; cli_id++)
                 ktb_destroy_client(cli_id);
-        */
 
 
         /* checking if all pcds are indeed deleted by a ktb_destroy_client call */
