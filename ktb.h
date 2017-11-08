@@ -7,13 +7,24 @@
 #include <linux/radix-tree.h>
 #include <linux/list.h>
 #include <linux/tmem.h>
-
+/* 
+ * 2^14 pages = 2^26 B = 64 MB 
+ * 3*(2^12) pages = 3*(2^24) B = 48 MB 
+ * plan is to reduce the no. of pages held in 
+ * the backend to 16 MB worth memory when the 
+ * backend memory usage exceeds 64 MB.
+ * i.e 64 MB - 48 MB = 16 MB
+ */
+#define MAX_SYS_PAGES (1ULL << 14)
+//#define REDUCE_SYS_PAGES_BY (3*(1ULL << 12))
+#define REDUCE_SYS_PAGES_BY (3ULL << 12)
 #define LOCAL_CLIENT ((uint16_t) - 1)
 #define TMEM_CLIENT 1
 #define MAX_CLIENTS 16
 #define MAX_POOLS_PER_CLIENT 16
 #define TMEM_POOL_PRIVATE_UUID	{ 0, 0 }
 #define OBJ_HASH_BUCKETS 256
+#define PAGE_HASH_MASK 256
 #define OBJ_HASH_BUCKETS_MASK (OBJ_HASH_BUCKETS-1)
 #define NOT_SHAREABLE ((uint16_t)-1UL)
 
@@ -49,7 +60,13 @@
 /******************************************************************************/
 /*					       End declaration of debug macros*/ 
 /******************************************************************************/
-
+enum
+{
+        NORMAL,
+        ASSOCIATING,
+        REMOTIFYING,
+        DISASSOCIATING,
+};
 /******************************************************************************/
 /*				   Declaration of ktb data structures and api */ 
 /******************************************************************************/
@@ -212,10 +229,17 @@ struct tmem_page_descriptor {
 /*		 	      End KTB pool object PAGE related data structures*/
 /******************************************************************************/
 struct tmem_system_view {
+	uint64_t remote_tree_ids[256];
         struct rb_root pcd_tree_roots[256]; 
+        struct radix_tree_root pcd_remote_tree_roots[256];
+        //struct radix_tree_root pcd_remotified_tree_roots[256];
         rwlock_t pcd_tree_rwlocks[256]; 
+        rwlock_t pcd_remote_tree_rwlocks[256];
+        //rwlock_t pcd_remotified_tree_rwlocks[256];
         struct list_head remote_sharing_candidate_list;
         struct list_head local_only_list;
+	struct list_head remote_shared_list;
+        //struct list_head pcd_preorder_stack;
         rwlock_t system_list_rwlock;
         //spinlock_t system_list_lock;
 };
@@ -223,6 +247,9 @@ struct tmem_system_view {
 /*				  KTB pool object PAGE related data structures*/
 /******************************************************************************/
 struct tmem_page_content_descriptor {
+        /*status: 0 - local, 1 - being accessed by remote, 2 - put in remote*/
+        int status;
+        int currently;
 	/*
 	union 
 	{
@@ -232,7 +259,7 @@ struct tmem_page_content_descriptor {
 	*/
         /*this pgp field is just for testing correctness*/
         struct tmem_page_descriptor *pgp;
-	struct page* system_page;  //page frame pointer
+	struct page *system_page;  //page frame pointer
 	struct rb_node pcd_rb_tree_node;
   	//uint32_t index;
 	uint32_t size; 
@@ -241,13 +268,32 @@ struct tmem_page_content_descriptor {
 	
         struct list_head system_rscl_pcds;
         struct list_head system_lol_pcds;
+	struct list_head system_rs_pcds;
+        //struct list_head preorder_stack;
+        char *remote_ip;
+	/* 
+	 * @remote_id can be the id of the remote page that you've remote
+	 * deduplicated this pcd page with; which is unique in the radix 
+	 * tree pcd_remote_tree_roots[firstbyte] at the remote machine.
+	 * 		OR
+	 * if this pcd page is being remote deduplicated by some remote machine
+	 * then @remote_id is the unique id in the corresponding radix tree
+	 * pcd_remote_tree_roots[firstbyte]. 
+	 *
+	 * hence it will never be both.
+	 */
+        uint64_t remote_id;
+        uint16_t firstbyte;
+        //uint64_t pagehash;
 	//struct list_head pgp_list;
     	//bool eviction_attempted;  // CHANGE TO lifetimes? (settable)
 	
-	/* meaning of 'size'
+	/* 
+         * meaning of 'size'
 	 * if compression_enabled -> 0<size<PAGE_SIZE (*cdata)
          * else if tze, 0<=size<PAGE_SIZE, rounded up to mult of 8
-         * else PAGE_SIZE -> *pfp */
+         * else PAGE_SIZE -> *pfp
+         */
 };
 /******************************************************************************/
 /*		 	     End KTB pool object PAGE  related data structures*/
@@ -256,6 +302,7 @@ struct tmem_page_content_descriptor {
 //extern struct rb_root pcd_tree_roots[256]; // choose based on first byte of page
 //extern rwlock_t pcd_tree_rwlocks[256]; // poor man's concurrency for now
 //extern spinlock_t client_list_lock;
+extern uint64_t system_unique_pages;
 extern struct tmem_system_view tmem_system;
 
 extern struct kmem_cache* tmem_page_descriptors_cachep;
@@ -266,6 +313,8 @@ extern struct kmem_cache* tmem_object_nodes_cachep;
 /*my bloom filter related*/
 extern struct bloom_filter* tmem_system_bloom_filter;
 
+/*ktb functions*/
+extern int ktb_remotified_get_page(struct page*, char*, uint8_t, uint64_t);
 /*tmem pool functions*/
 extern void tmem_new_pool(struct tmem_pool* , uint32_t );
 extern void tmem_flush_pool(struct tmem_pool*, int);
@@ -305,13 +354,19 @@ extern int tmem_copy_to_client(struct page* client_page, struct page* page);
 extern int pcd_associate(struct tmem_page_descriptor*, uint32_t);
 
 /*main remote dedup function*/
-extern int pcd_remote_associate(struct page*);
+extern int pcd_remote_associate(struct page*, uint64_t*);
+
+/*update status of remotified page*/
+void tmem_pcd_status_update(struct tmem_page_content_descriptor*,\
+                            struct tmem_page_content_descriptor**,\
+                            uint8_t, uint64_t, char*, int, bool*);
+
 /*custom radix_tree_destroy function*/
 //bool  __radix_tree_delete_node(struct radix_tree_root*,struct radix_tree_node*);
 //void* indirect_to_ptr(void *);
 
 /*list functions*/
-extern void update_summary(struct tmem_page_descriptor*);
+extern void update_bflt(struct tmem_page_content_descriptor*);
 
 /*
 //tcp server
